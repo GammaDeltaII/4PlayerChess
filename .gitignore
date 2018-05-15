@@ -1,0 +1,5 @@
+.idea/
+pyuic.json
+remove_path.py
+requirements.txt
+setup.py
