@@ -18,14 +18,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-"""
-Main program file. Launch from the command line as follows:
-
-    $ python3 4pc.py
-
-Last edited: May 2018
-"""
-
 import sys
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtGui import QIcon
