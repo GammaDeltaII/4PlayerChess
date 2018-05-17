@@ -20,20 +20,21 @@
 
 from PyQt5.QtWidgets import QWidget, QMainWindow, QSizePolicy, QLayout
 from PyQt5.QtCore import Qt, QObject, QSize, QRect, QPoint, pyqtSignal
-from PyQt5.QtGui import QPainter, QPalette, QIcon
-from ui.mainwindow_ui import Ui_mainWindow
+from PyQt5.QtGui import QPainter, QPalette, QIcon, QColor
+from collections import deque
+from ui.mainwindow import Ui_mainWindow
 
 
 class MainWindow(QMainWindow, Ui_mainWindow):
+    """The GUI main window."""
     def __init__(self):
         super().__init__()
         self.setupUi(self)
 
+        # Create view and algorithm instances
         self.view = View()
         self.gridLayout.addWidget(self.view, 0, 0, 3, 1)
-        self.algorithm = Algorithm()
-        self.algorithm.newGame()
-        self.view.setBoard(self.algorithm.board)
+        self.algorithm = Teams()
 
         # Set piece icons
         pieces = ['rP', 'rN', 'rR', 'rB', 'rQ', 'rK',
@@ -43,24 +44,46 @@ class MainWindow(QMainWindow, Ui_mainWindow):
         for piece in pieces:
             self.view.setPiece(piece, QIcon('resources/img/pieces/'+piece+'.svg'))
 
+        # Set view size based on board square size
         self.view.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.view.setSquareSize(QSize(50, 50))
         self.layout().setSizeConstraint(QLayout.SetFixedSize)
 
-        self.clickPoint = QPoint()
+        # Connect signals
         self.view.clicked.connect(self.viewClicked)
+        self.algorithm.boardChanged.connect(self.view.setBoard)  # If algorithm changes board, view must update board
+        self.algorithm.currentPlayerChanged.connect(self.view.highlightPlayer)
+
+        # Connect actions
+        self.actionQuit.triggered.connect(self.close)
+        self.actionNew_Game.triggered.connect(self.algorithm.newGame)
+        self.boardResetButton.clicked.connect(self.algorithm.newGame)
+        self.boardResetButton.clicked.connect(self.view.repaint)    # Immediate repaint as opposed to scheduled update
+
+        # Start new game
+        self.algorithm.newGame()
+
+        # Initialize clicked point and highlighted square
+        self.clickPoint = QPoint()
+        self.selectedSquare = 0
 
     def viewClicked(self, square):
-        """Handles board click event and moves clicked piece to clicked square."""
+        """Handles user click event to move clicked piece to clicked square."""
         if self.clickPoint.isNull():
-            self.clickPoint = square
+            if self.view.board.getData(square.x(), square.y()) != ' ':
+                self.clickPoint = square
+                self.selectedSquare = self.view.SquareHighlight(square.x(), square.y(), QColor(255, 255, 0, 50))
+                self.view.addHighlight(self.selectedSquare)
         else:
             if square != self.clickPoint:
-                self.view.board.movePiece(self.clickPoint.x(), self.clickPoint.y(), square.x(), square.y())
+                self.algorithm.move(self.clickPoint.x(), self.clickPoint.y(), square.x(), square.y())
             self.clickPoint = QPoint()
+            self.view.removeHighlight(self.selectedSquare)
+            self.selectedSquare = 0
 
 
 class Board(QObject):
+    """The Board is the actual chess board and is the data structure shared between the View and the Algorithm."""
     boardReset = pyqtSignal()
     dataChanged = pyqtSignal(int, int)
 
@@ -132,11 +155,39 @@ class Board(QObject):
 
 
 class Algorithm(QObject):
+    """The Algorithm is the underlying logic responsible for changing the current state of the board."""
     boardChanged = pyqtSignal(Board)
+    gameOver = pyqtSignal(str)
+    currentPlayerChanged = pyqtSignal(str)
+
+    NoResult, Team1Wins, Team2Wins, Draw = ['NoResult', 'Team1Wins', 'Team2Wins', 'Draw']   # Results
+    NoPlayer, Red, Blue, Yellow, Green = ['NoPlayer', 'Red', 'Blue', 'Yellow', 'Green']     # Players
+    playerQueue = deque([Red, Blue, Yellow, Green])
 
     def __init__(self):
         super().__init__()
         self.board = Board(14, 14)
+        self.result = self.NoResult
+        self.currentPlayer = self.NoPlayer
+
+    def setResult(self, value):
+        if self.result == value:
+            return
+        if self.result == self.NoResult:
+            self.result = value
+            self.gameOver.emit(self.result)
+        else:
+            self.result = value
+
+    def setCurrentPlayer(self, value):
+        if self.currentPlayer == value:
+            return
+        self.currentPlayer = value
+        self.currentPlayerChanged.emit(self.currentPlayer)
+
+    def setPlayerQueue(self, currentPlayer):
+        while self.playerQueue[0] != currentPlayer:
+            self.playerQueue.rotate(-1)
 
     def setBoard(self, board):
         """Sets board to new board."""
@@ -156,6 +207,68 @@ class Algorithm(QObject):
         self.board.setFen4('3yRyNyByKyQyByNyR3/3yPyPyPyPyPyPyPyP3/14/bRbP10gPgR/bNbP10gPgN/bBbP10gPgB/bKbP10gPgQ/'
                            'bQbP10gPgK/bBbP10gPgB/bNbP10gPgN/bRbP10gPgR/14/3rPrPrPrPrPrPrPrP3/3rRrNrBrQrKrBrNrR3 '
                            'r rKrQbKbQyKyQgKgQ - 0 1')
+        self.setResult(self.NoResult)
+        self.setCurrentPlayer(self.Red)
+        self.setPlayerQueue(self.currentPlayer)
+
+    def move(self, fromFile, fromRank, toFile, toRank):
+        """This method must be overridden in each subclass to define the proper logic corresponding to Teams or FFA."""
+        return False
+
+
+class Teams(Algorithm):
+    """A subclass of Algorithm for the 4-player chess Teams variant."""
+    def __init__(self):
+        super().__init__()
+
+    def move(self, fromFile, fromRank, toFile, toRank):
+        if self.currentPlayer == self.NoPlayer:
+            return False
+        # Check if square contains piece of current player. (A player may only move his own pieces.)
+        fromData = self.board.getData(fromFile, fromRank)
+        if self.currentPlayer == self.Red and fromData[0] != 'r':
+            return False
+        if self.currentPlayer == self.Blue and fromData[0] != 'b':
+            return False
+        if self.currentPlayer == self.Yellow and fromData[0] != 'y':
+            return False
+        if self.currentPlayer == self.Green and fromData[0] != 'g':
+            return False
+
+        # Check if move is within board
+        if toFile < 0 or toFile > (self.board.files-1):
+            return False
+        if toRank < 0 or toRank > (self.board.ranks-1):
+            return False
+        if ((toFile < 3 and toRank < 3) or (toFile < 3 and toRank > 10) or
+                (toFile > 10 and toRank < 3) or (toFile > 10 and toRank > 10)):
+            return False
+
+        # Check if target square is not occupied by friendly piece. (A player may not capture a friendly piece.)
+        toData = self.board.getData(toFile, toRank)
+        if self.currentPlayer == self.Red and (toData[0] == 'r' or toData[0] == 'y'):
+            return False
+        if self.currentPlayer == self.Blue and (toData[0] == 'b' or toData[0] == 'g'):
+            return False
+        if self.currentPlayer == self.Yellow and (toData[0] == 'y' or toData[0] == 'r'):
+            return False
+        if self.currentPlayer == self.Green and (toData[0] == 'g' or toData[0] == 'b'):
+            return False
+
+        # Make the move
+        self.board.movePiece(fromFile, fromRank, toFile, toRank)
+
+        # Rotate player queue and get next player from the queue (first element)
+        self.playerQueue.rotate(-1)
+        self.setCurrentPlayer(self.playerQueue[0])
+
+        return True
+
+
+# class FFA(Algorithm):
+#     """A subclass of Algorithm for the 4-player chess Free-For-All (FFA) variant."""
+#     def __init__(self):
+#         super().__init__()
 
 
 class View(QWidget):
@@ -167,6 +280,22 @@ class View(QWidget):
         self.squareSize = QSize(50, 50)
         self.board = Board(14, 14)
         self.pieces = {}
+        self.highlights = []
+        self.playerHighlights = {'Red': self.PlayerHighlight(12, 1, QColor('#bf3b43')),
+                                 'Blue': self.PlayerHighlight(1, 1, QColor('#4185bf')),
+                                 'Yellow': self.PlayerHighlight(1, 12, QColor('#c09526')),
+                                 'Green': self.PlayerHighlight(12, 12, QColor('#4e9161'))}
+
+    class SquareHighlight:
+        Type = 1
+
+        def __init__(self, file, rank, color):
+            self.file = file
+            self.rank = rank
+            self.color = color
+
+    class PlayerHighlight(SquareHighlight):
+        pass
 
     def setBoard(self, board):
         """Sets board to new board."""
@@ -206,14 +335,20 @@ class View(QWidget):
         """Overrides QWidget paintEvent() method. Draws squares and pieces on the board."""
         painter = QPainter()
         painter.begin(self)
-        for rank in reversed(range(self.board.ranks)):
+        # First draw squares, then highlights, then pieces
+        for rank in range(self.board.ranks):
             for file in range(self.board.files):
                 # Do not paint 3x3 sub-grids at the corners
                 if not ((file < 3 and rank < 3) or (file < 3 and rank > 10) or
                         (file > 10 and rank < 3) or (file > 10 and rank > 10)):
-                    painter.save()
                     self.drawSquare(painter, file, rank)
-                    painter.restore()
+        self.drawHighlights(painter)
+        painter.fillRect(self.squareRect(12, 1), QColor('#40bf3b43'))
+        painter.fillRect(self.squareRect(1, 1), QColor('#404185bf'))
+        painter.fillRect(self.squareRect(1, 12), QColor('#40c09526'))
+        painter.fillRect(self.squareRect(12, 12), QColor('#404e9161'))
+        for rank in range(self.board.ranks):
+            for file in range(self.board.files):
                 self.drawPiece(painter, file, rank)
         painter.end()
 
@@ -221,7 +356,6 @@ class View(QWidget):
         """Draws dark or light square at position (file, rank) using painter."""
         rect = self.squareRect(file, rank)
         fillColor = self.palette().color(QPalette.Midlight) if (file+rank) % 2 else self.palette().color(QPalette.Mid)
-        painter.setBrush(fillColor)
         painter.fillRect(rect, fillColor)
 
     def setPiece(self, char, icon):
@@ -257,3 +391,30 @@ class View(QWidget):
         if point.isNull():
             return
         self.clicked.emit(point)
+
+    def addHighlight(self, highlight):
+        self.highlights.append(highlight)
+        self.update()
+
+    def removeHighlight(self, highlight):
+        self.highlights.remove(highlight)
+        self.update()
+
+    def drawHighlights(self, painter):
+        for highlight in self.highlights:
+            if highlight.Type == self.SquareHighlight.Type:
+                rect = self.squareRect(highlight.file, highlight.rank)
+                painter.fillRect(rect, highlight.color)
+
+    def highlightPlayer(self, player):
+        self.addHighlight(self.playerHighlights[player])
+        for otherPlayer in self.playerHighlights:
+            if otherPlayer != player:
+                try:
+                    self.removeHighlight(self.playerHighlights[otherPlayer])
+                except ValueError:
+                    pass
+
+    def resetHighlights(self):
+        self.highlights = []
+        self.update()

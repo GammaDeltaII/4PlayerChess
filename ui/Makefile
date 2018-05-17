@@ -15,27 +15,18 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+# Compiler
+C = pyuic5
 
-=====================
-    INSTALL & RUN
-=====================
+# Compiler flags
+FLAGS = --from-imports
 
-Prerequisites:
-- Python3 (https://www.python.org/downloads/)
-- PyQt5 (https://www.riverbankcomputing.com/software/pyqt/download5)
+# Target files
+TARGET := mainwindow.py
 
-This program is cross-platform compatible (macOS, Linux, Windows).
+# For all target files
+all: $(TARGET)
 
-
-Run the main file from the command line:
-
-  $ python3 4pc.py
-
-
-=====================
-      RESOURCES
-=====================
-
-GitHub repository:
-https://github.com/GammaDeltaII/4PlayerChess
-
+# Output file $@ is .py and (first) dependency $< is .ui
+%.py : %.ui
+	$(C) $(FLAGS) -o $@ $<
