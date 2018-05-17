@@ -25,6 +25,7 @@ from gui.main import MainWindow
 
 
 def main():
+    """Creates application and main window and sets application icon."""
     app = QApplication(sys.argv)
     app.setWindowIcon(QIcon('resources/img/icon.png'))
     window = MainWindow()

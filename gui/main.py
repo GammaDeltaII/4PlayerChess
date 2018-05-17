@@ -53,12 +53,20 @@ class MainWindow(QMainWindow, Ui_mainWindow):
         self.view.clicked.connect(self.viewClicked)
         self.algorithm.boardChanged.connect(self.view.setBoard)  # If algorithm changes board, view must update board
         self.algorithm.currentPlayerChanged.connect(self.view.highlightPlayer)
+        self.algorithm.fen4Generated.connect(self.fenField.setPlainText)
 
         # Connect actions
         self.actionQuit.triggered.connect(self.close)
         self.actionNew_Game.triggered.connect(self.algorithm.newGame)
         self.boardResetButton.clicked.connect(self.algorithm.newGame)
         self.boardResetButton.clicked.connect(self.view.repaint)    # Immediate repaint as opposed to scheduled update
+        self.getFenButton.clicked.connect(self.algorithm.getBoardState)
+        self.getFenButton.clicked.connect(self.fenField.repaint)
+        self.setFenButton.clicked.connect(self.setFen4)
+        self.actionCopy_FEN4.triggered.connect(self.fenField.selectAll)
+        self.actionCopy_FEN4.triggered.connect(self.fenField.copy)
+        self.actionPaste_FEN4.triggered.connect(self.fenField.clear)
+        self.actionPaste_FEN4.triggered.connect(self.fenField.paste)
 
         # Start new game
         self.algorithm.newGame()
@@ -80,6 +88,12 @@ class MainWindow(QMainWindow, Ui_mainWindow):
             self.clickPoint = QPoint()
             self.view.removeHighlight(self.selectedSquare)
             self.selectedSquare = 0
+
+    def setFen4(self):
+        """Gets FEN4 from the text field to set the board accordingly."""
+        fen4 = self.fenField.toPlainText()
+        self.algorithm.setBoardState(fen4)
+        self.view.repaint()     # Forced repaint
 
 
 class Board(QObject):
@@ -153,15 +167,50 @@ class Board(QObject):
 
         self.boardReset.emit()
 
+    def getFen4(self):
+        """Generates FEN4 from current board state."""
+        fen4 = ''
+        skip = 0
+        prev = ' '
+        for rank in reversed(range(self.ranks)):
+            for file in range(self.files):
+                char = self.getData(file, rank)
+                # If current square is empty, increment skip value
+                if char == ' ':
+                    skip += 1
+                    prev = char
+                else:
+                    # If current square is not empty, but previous square was empty, append skip value to FEN4 string,
+                    # unless the previous square was on the previous rank
+                    if prev == ' ' and file != 0:
+                        fen4 += str(skip)
+                        skip = 0
+                    # Append algebraic piece name to FEN4 string
+                    fen4 += char
+                    prev = char
+            # If skip is non-zero at end of rank, append skip and reset to zero
+            if skip > 0:
+                fen4 += str(skip)
+                skip = 0
+            # Append slash at end of rank and append space after last rank
+            if rank == 0:
+                fen4 += ' '
+            else:
+                fen4 += '/'
+        # Append current player
+
+        return fen4
+
 
 class Algorithm(QObject):
     """The Algorithm is the underlying logic responsible for changing the current state of the board."""
     boardChanged = pyqtSignal(Board)
     gameOver = pyqtSignal(str)
     currentPlayerChanged = pyqtSignal(str)
+    fen4Generated = pyqtSignal(str)
 
     NoResult, Team1Wins, Team2Wins, Draw = ['NoResult', 'Team1Wins', 'Team2Wins', 'Draw']   # Results
-    NoPlayer, Red, Blue, Yellow, Green = ['NoPlayer', 'Red', 'Blue', 'Yellow', 'Green']     # Players
+    NoPlayer, Red, Blue, Yellow, Green = ['NoPlayer', 'r', 'b', 'y', 'g']     # Players
     playerQueue = deque([Red, Blue, Yellow, Green])
 
     def __init__(self):
@@ -171,6 +220,7 @@ class Algorithm(QObject):
         self.currentPlayer = self.NoPlayer
 
     def setResult(self, value):
+        """Updates game result, if changed."""
         if self.result == value:
             return
         if self.result == self.NoResult:
@@ -180,17 +230,20 @@ class Algorithm(QObject):
             self.result = value
 
     def setCurrentPlayer(self, value):
+        """Updates current player, if changed."""
         if self.currentPlayer == value:
             return
         self.currentPlayer = value
+        self.setPlayerQueue(self.currentPlayer)
         self.currentPlayerChanged.emit(self.currentPlayer)
 
     def setPlayerQueue(self, currentPlayer):
+        """Rotates player queue such that the current player is the first in the queue."""
         while self.playerQueue[0] != currentPlayer:
             self.playerQueue.rotate(-1)
 
     def setBoard(self, board):
-        """Sets board to new board."""
+        """Updates board, if changed."""
         if self.board == board:
             return
         self.board = board
@@ -211,8 +264,22 @@ class Algorithm(QObject):
         self.setCurrentPlayer(self.Red)
         self.setPlayerQueue(self.currentPlayer)
 
+    def getBoardState(self):
+        """Gets FEN4 from current board state."""
+        fen4 = self.board.getFen4()
+        # Append character for current player
+        fen4 += self.currentPlayer
+        self.fen4Generated.emit(fen4)
+
+    def setBoardState(self, fen4):
+        """Sets board according to FEN4."""
+        if not fen4:
+            return
+        self.board.setFen4(fen4)
+        self.setCurrentPlayer(fen4.split(' ')[1])
+
     def move(self, fromFile, fromRank, toFile, toRank):
-        """This method must be overridden in each subclass to define the proper logic corresponding to Teams or FFA."""
+        """This method must be overridden to define the proper logic corresponding to the game type (Teams or FFA)."""
         return False
 
 
@@ -222,6 +289,7 @@ class Teams(Algorithm):
         super().__init__()
 
     def move(self, fromFile, fromRank, toFile, toRank):
+        """Moves piece from square (fromFile, fromRank) to square (toFile, toRank), if the move is valid."""
         if self.currentPlayer == self.NoPlayer:
             return False
         # Check if square contains piece of current player. (A player may only move his own pieces.)
@@ -272,6 +340,8 @@ class Teams(Algorithm):
 
 
 class View(QWidget):
+    """The View is responsible for rendering the current state of the board and signalling user interaction to the
+    underlying logic."""
     clicked = pyqtSignal(QPoint)
     squareSizeChanged = pyqtSignal(QSize)
 
@@ -281,12 +351,13 @@ class View(QWidget):
         self.board = Board(14, 14)
         self.pieces = {}
         self.highlights = []
-        self.playerHighlights = {'Red': self.PlayerHighlight(12, 1, QColor('#bf3b43')),
-                                 'Blue': self.PlayerHighlight(1, 1, QColor('#4185bf')),
-                                 'Yellow': self.PlayerHighlight(1, 12, QColor('#c09526')),
-                                 'Green': self.PlayerHighlight(12, 12, QColor('#4e9161'))}
+        self.playerHighlights = {'r': self.PlayerHighlight(12, 1, QColor('#bf3b43')),
+                                 'b': self.PlayerHighlight(1, 1, QColor('#4185bf')),
+                                 'y': self.PlayerHighlight(1, 12, QColor('#c09526')),
+                                 'g': self.PlayerHighlight(12, 12, QColor('#4e9161'))}
 
     class SquareHighlight:
+        """A square highlight type."""
         Type = 1
 
         def __init__(self, file, rank, color):
@@ -295,10 +366,11 @@ class View(QWidget):
             self.color = color
 
     class PlayerHighlight(SquareHighlight):
+        """A player highlight type. Same as square highlight, just renamed for convenience (unaltered subclass)."""
         pass
 
     def setBoard(self, board):
-        """Sets board to new board."""
+        """Updates board, if changed. Disconnects signals from old board and connects them to new board."""
         if self.board == board:
             return
         if self.board:
@@ -307,7 +379,6 @@ class View(QWidget):
             # If there are no signal-slot connections, TypeError is raised
             except TypeError:
                 pass
-
         self.board = board
         if board:
             board.dataChanged.connect(self.update)
@@ -393,20 +464,24 @@ class View(QWidget):
         self.clicked.emit(point)
 
     def addHighlight(self, highlight):
+        """Adds highlight to the list and redraws view."""
         self.highlights.append(highlight)
         self.update()
 
     def removeHighlight(self, highlight):
+        """Adds highlight to the list and redraws view."""
         self.highlights.remove(highlight)
         self.update()
 
     def drawHighlights(self, painter):
+        """Draws all recognized highlights stored in the list."""
         for highlight in self.highlights:
             if highlight.Type == self.SquareHighlight.Type:
                 rect = self.squareRect(highlight.file, highlight.rank)
                 painter.fillRect(rect, highlight.color)
 
     def highlightPlayer(self, player):
+        """Adds highlight for player to indicate turn. Removes highlights for other players if they exist."""
         self.addHighlight(self.playerHighlights[player])
         for otherPlayer in self.playerHighlights:
             if otherPlayer != player:
@@ -416,5 +491,6 @@ class View(QWidget):
                     pass
 
     def resetHighlights(self):
+        """Clears list of highlights and redraws view."""
         self.highlights = []
         self.update()
