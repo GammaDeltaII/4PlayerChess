@@ -18,7 +18,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from PyQt5.QtWidgets import QWidget, QMainWindow, QSizePolicy, QLayout
+from PyQt5.QtWidgets import QWidget, QMainWindow, QSizePolicy, QLayout, QTreeWidgetItem
 from PyQt5.QtCore import Qt, QObject, QSize, QRect, QPoint, pyqtSignal
 from PyQt5.QtGui import QPainter, QPalette, QIcon, QColor
 from collections import deque
@@ -54,19 +54,31 @@ class MainWindow(QMainWindow, Ui_mainWindow):
         self.algorithm.boardChanged.connect(self.view.setBoard)  # If algorithm changes board, view must update board
         self.algorithm.currentPlayerChanged.connect(self.view.highlightPlayer)
         self.algorithm.fen4Generated.connect(self.fenField.setPlainText)
+        self.algorithm.moveTreeChanged.connect(self.updateMoveTree)
 
         # Connect actions
         self.actionQuit.triggered.connect(self.close)
         self.actionNew_Game.triggered.connect(self.algorithm.newGame)
-        self.boardResetButton.clicked.connect(self.algorithm.newGame)
-        self.boardResetButton.clicked.connect(self.view.repaint)    # Immediate repaint as opposed to scheduled update
-        self.getFenButton.clicked.connect(self.algorithm.getBoardState)
-        self.getFenButton.clicked.connect(self.fenField.repaint)
-        self.setFenButton.clicked.connect(self.setFen4)
+        self.actionNew_Game.triggered.connect(self.moveTreeWidget.clear)
         self.actionCopy_FEN4.triggered.connect(self.fenField.selectAll)
         self.actionCopy_FEN4.triggered.connect(self.fenField.copy)
         self.actionPaste_FEN4.triggered.connect(self.fenField.clear)
         self.actionPaste_FEN4.triggered.connect(self.fenField.paste)
+
+        self.boardResetButton.clicked.connect(self.algorithm.newGame)
+        self.boardResetButton.clicked.connect(self.view.repaint)  # Forced repaint
+        self.boardResetButton.clicked.connect(self.moveTreeWidget.clear)
+        self.getFenButton.clicked.connect(self.algorithm.getBoardState)
+        self.getFenButton.clicked.connect(self.fenField.repaint)
+        self.setFenButton.clicked.connect(self.setFen4)
+        self.prevMoveButton.clicked.connect(self.algorithm.prevMove)
+        self.prevMoveButton.clicked.connect(self.view.repaint)
+        self.nextMoveButton.clicked.connect(self.algorithm.nextMove)
+        self.nextMoveButton.clicked.connect(self.view.repaint)
+        self.firstMoveButton.clicked.connect(self.algorithm.firstMove)
+        self.firstMoveButton.clicked.connect(self.view.repaint)
+        self.lastMoveButton.clicked.connect(self.algorithm.lastMove)
+        self.lastMoveButton.clicked.connect(self.view.repaint)
 
         # Start new game
         self.algorithm.newGame()
@@ -84,7 +96,7 @@ class MainWindow(QMainWindow, Ui_mainWindow):
                 self.view.addHighlight(self.selectedSquare)
         else:
             if square != self.clickPoint:
-                self.algorithm.move(self.clickPoint.x(), self.clickPoint.y(), square.x(), square.y())
+                self.algorithm.makeMove(self.clickPoint.x(), self.clickPoint.y(), square.x(), square.y())
             self.clickPoint = QPoint()
             self.view.removeHighlight(self.selectedSquare)
             self.selectedSquare = 0
@@ -93,7 +105,24 @@ class MainWindow(QMainWindow, Ui_mainWindow):
         """Gets FEN4 from the text field to set the board accordingly."""
         fen4 = self.fenField.toPlainText()
         self.algorithm.setBoardState(fen4)
-        self.view.repaint()     # Forced repaint
+        self.view.repaint()  # Forced repaint
+
+    def updateMoveTree(self, node, parent=None):
+        """Traverses through the move tree and constructs the move tree widget accordingly."""
+        # The node is a nested list with move strings, i.e. node = ['parent', [children]]
+        if not parent:
+            # If no parent, it is the root. The entire move tree is redrawn, so it should be cleared first.
+            self.moveTreeWidget.clear()
+            parent = QTreeWidgetItem(self.moveTreeWidget)
+            self.moveTreeWidget.setRootIndex(self.moveTreeWidget.indexFromItem(parent))
+        parentName = node[0]
+        parent.setText(0, parentName)
+        parent.setExpanded(True)
+        children = node[1]
+        if children:
+            for childNode in children:
+                child = QTreeWidgetItem(parent)
+                self.updateMoveTree(childNode, child)
 
 
 class Board(QObject):
@@ -159,12 +188,11 @@ class Board(QObject):
                 self.setData(file, rank, char)
             next_ = fen4[index]
             if next_ != '/' and next_ != ' ':
-                # If no slash or space after rank, reset board
+                # If no slash or space after rank, the FEN4 is invalid, so reset board
                 self.initBoard()
                 return
-            else:   # Skip the slash
+            else:  # Skip the slash
                 index += 1
-
         self.boardReset.emit()
 
     def getFen4(self):
@@ -197,8 +225,6 @@ class Board(QObject):
                 fen4 += ' '
             else:
                 fen4 += '/'
-        # Append current player
-
         return fen4
 
 
@@ -208,9 +234,10 @@ class Algorithm(QObject):
     gameOver = pyqtSignal(str)
     currentPlayerChanged = pyqtSignal(str)
     fen4Generated = pyqtSignal(str)
+    moveTreeChanged = pyqtSignal(list)
 
-    NoResult, Team1Wins, Team2Wins, Draw = ['NoResult', 'Team1Wins', 'Team2Wins', 'Draw']   # Results
-    NoPlayer, Red, Blue, Yellow, Green = ['NoPlayer', 'r', 'b', 'y', 'g']     # Players
+    NoResult, Team1Wins, Team2Wins, Draw = ['NoResult', 'Team1Wins', 'Team2Wins', 'Draw']  # Results
+    NoPlayer, Red, Blue, Yellow, Green = ['NoPlayer', 'r', 'b', 'y', 'g']  # Players
     playerQueue = deque([Red, Blue, Yellow, Green])
 
     def __init__(self):
@@ -218,6 +245,39 @@ class Algorithm(QObject):
         self.board = Board(14, 14)
         self.result = self.NoResult
         self.currentPlayer = self.NoPlayer
+        self.moveNumber = 0
+        self.currentMove = self.Node('root', [], None)
+
+    class Node:
+        """Generic node class. Basic element of a tree."""
+        def __init__(self, name, children, parent):
+            self.name = name
+            self.children = children
+            self.parent = parent
+
+        def add(self, node):
+            """Adds node to children."""
+            self.children.append(node)
+
+        def pop(self):
+            """Removes last child from node."""
+            self.children.pop()
+
+        def getRoot(self):
+            """Backtracks tree and returns root node."""
+            if self.parent is None:
+                return self
+            return self.parent.getRoot()
+
+        def getTree(self):
+            """Returns the (sub)tree starting from the current node."""
+            tree = [self.name, [child.getTree() for child in self.children]]
+            return tree
+
+    def resetMoves(self):
+        """Resets current move to root and move number to zero."""
+        self.moveNumber = 0
+        self.currentMove = self.Node('root', [], None)
 
     def setResult(self, value):
         """Updates game result, if changed."""
@@ -263,6 +323,7 @@ class Algorithm(QObject):
         self.setResult(self.NoResult)
         self.setCurrentPlayer(self.Red)
         self.setPlayerQueue(self.currentPlayer)
+        self.resetMoves()
 
     def getBoardState(self):
         """Gets FEN4 from current board state."""
@@ -278,7 +339,95 @@ class Algorithm(QObject):
         self.board.setFen4(fen4)
         self.setCurrentPlayer(fen4.split(' ')[1])
 
-    def move(self, fromFile, fromRank, toFile, toRank):
+    def treeToAlgebraic(self, tree):
+        if tree[0] == 'root':
+            newTree = ['root', [self.treeToAlgebraic(subtree) for subtree in tree[1]]]
+        else:
+            newTree = [self.toAlgebraic(tree[0]), [self.treeToAlgebraic(subtree) for subtree in tree[1]]]
+        return newTree
+
+    def toAlgebraic(self, moveString):
+        """Converts move string to algebraic notation."""
+        moveString = moveString[1:]
+        moveString = moveString.split()
+        if moveString[0] == 'P':
+            moveString.pop(0)
+            if len(moveString) == 3:
+                moveString[0] = moveString[0][0]
+                moveString[1] = 'x'
+            else:
+                moveString.pop(0)
+        elif len(moveString) == 4:
+            moveString[2] = 'x'
+            moveString.remove(moveString[1])
+        else:
+            moveString.remove(moveString[1])
+        moveString = ''.join(moveString)
+        return moveString
+
+    def strMove(self, fromFile, fromRank, toFile, toRank):
+        """Returns move in string form, separated by spaces, i.e. '<piece> <from> <captured piece> <to>'."""
+        piece: str = self.board.getData(fromFile, fromRank)
+        target: str = self.board.getData(toFile, toRank)
+        char = (piece + ' ' + chr(97+fromFile) + str(fromRank+1) + ' ' + target*(target != ' ') + ' ' + chr(97+toFile) +
+                str(toRank+1))  # chr(97) = 'a'
+        return char
+
+    def prevMove(self):
+        """Sets board state to previous move."""
+        if self.currentMove.name == 'root':
+            return
+        moveString = self.currentMove.name
+        moveString = moveString.split()
+        piece = moveString[0]
+        fromFile = ord(moveString[1][0]) - 97  # chr(97) = 'a'
+        fromRank = int(moveString[1][1:]) - 1
+        if len(moveString) == 4:
+            target = moveString[2]
+            toFile = ord(moveString[3][0]) - 97
+            toRank = int(moveString[3][1:]) - 1
+        else:
+            target = ' '
+            toFile = ord(moveString[2][0]) - 97
+            toRank = int(moveString[2][1:]) - 1
+        self.board.setData(fromFile, fromRank, piece)
+        self.board.setData(toFile, toRank, target)
+        self.currentMove = self.currentMove.parent
+        self.moveNumber -= 1
+        self.playerQueue.rotate(1)
+        self.setCurrentPlayer(self.playerQueue[0])
+
+    def nextMove(self):
+        """Sets board state to next move."""
+        if not self.currentMove.children:
+            return
+        moveString = self.currentMove.children[-1].name  # Take last variation
+        moveString = moveString.split()
+        piece = moveString[0]
+        fromFile = ord(moveString[1][0]) - 97  # chr(97) = 'a'
+        fromRank = int(moveString[1][1:]) - 1
+        if len(moveString) == 4:
+            toFile = ord(moveString[3][0]) - 97
+            toRank = int(moveString[3][1:]) - 1
+        else:
+            toFile = ord(moveString[2][0]) - 97
+            toRank = int(moveString[2][1:]) - 1
+        self.board.setData(fromFile, fromRank, ' ')
+        self.board.setData(toFile, toRank, piece)
+        self.currentMove = self.currentMove.children[-1]
+        self.moveNumber += 1
+        self.playerQueue.rotate(-1)
+        self.setCurrentPlayer(self.playerQueue[0])
+
+    def firstMove(self):
+        while self.currentMove.name != 'root':
+            self.prevMove()
+
+    def lastMove(self):
+        while self.currentMove.children:
+            self.nextMove()
+
+    def makeMove(self, fromFile, fromRank, toFile, toRank):
         """This method must be overridden to define the proper logic corresponding to the game type (Teams or FFA)."""
         return False
 
@@ -288,7 +437,7 @@ class Teams(Algorithm):
     def __init__(self):
         super().__init__()
 
-    def move(self, fromFile, fromRank, toFile, toRank):
+    def makeMove(self, fromFile, fromRank, toFile, toRank):
         """Moves piece from square (fromFile, fromRank) to square (toFile, toRank), if the move is valid."""
         if self.currentPlayer == self.NoPlayer:
             return False
@@ -323,6 +472,28 @@ class Teams(Algorithm):
         if self.currentPlayer == self.Green and (toData[0] == 'g' or toData[0] == 'b'):
             return False
 
+        # TODO check if move is legal
+
+        # If move already exists (in case of variations), do not change the move tree
+        moveString = self.strMove(fromFile, fromRank, toFile, toRank)
+        if not (self.currentMove.children and (moveString in (child.name for child in self.currentMove.children))):
+            # Make move child of current move and update current move (i.e. previous move is parent of current move)
+            move = self.Node(moveString, [], self.currentMove)
+            self.currentMove.add(move)
+            self.currentMove = move
+
+            # Send signal to update the move list and pass the tree with moves in algebraic notation
+            tree = self.treeToAlgebraic(self.currentMove.getRoot().getTree())
+            self.moveTreeChanged.emit(tree)
+        else:
+            # Update current move, but do not change the move tree
+            for child in self.currentMove.children:
+                if child.name == moveString:
+                    self.currentMove = child
+
+        # Increment move number
+        self.moveNumber += 1
+
         # Make the move
         self.board.movePiece(fromFile, fromRank, toFile, toRank)
 
@@ -333,10 +504,11 @@ class Teams(Algorithm):
         return True
 
 
-# class FFA(Algorithm):
-#     """A subclass of Algorithm for the 4-player chess Free-For-All (FFA) variant."""
-#     def __init__(self):
-#         super().__init__()
+class FFA(Algorithm):
+    """A subclass of Algorithm for the 4-player chess Free-For-All (FFA) variant."""
+    # TODO implement FFA class
+    def __init__(self):
+        super().__init__()
 
 
 class View(QWidget):
