@@ -18,7 +18,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from PyQt5.QtWidgets import QWidget, QMainWindow, QSizePolicy, QLayout, QTreeWidgetItem
+from PyQt5.QtWidgets import QWidget, QMainWindow, QSizePolicy, QLayout, QListWidget, QListWidgetItem, QListView, \
+    QFrame, QAbstractItemView
 from PyQt5.QtCore import Qt, QObject, QSize, QRect, QPoint, pyqtSignal
 from PyQt5.QtGui import QPainter, QPalette, QIcon, QColor
 from collections import deque
@@ -59,7 +60,7 @@ class MainWindow(QMainWindow, Ui_mainWindow):
         # Connect actions
         self.actionQuit.triggered.connect(self.close)
         self.actionNew_Game.triggered.connect(self.algorithm.newGame)
-        self.actionNew_Game.triggered.connect(self.moveTreeWidget.clear)
+        self.actionNew_Game.triggered.connect(self.moveListWidget.clear)
         self.actionCopy_FEN4.triggered.connect(self.fenField.selectAll)
         self.actionCopy_FEN4.triggered.connect(self.fenField.copy)
         self.actionPaste_FEN4.triggered.connect(self.fenField.clear)
@@ -67,7 +68,7 @@ class MainWindow(QMainWindow, Ui_mainWindow):
 
         self.boardResetButton.clicked.connect(self.algorithm.newGame)
         self.boardResetButton.clicked.connect(self.view.repaint)  # Forced repaint
-        self.boardResetButton.clicked.connect(self.moveTreeWidget.clear)
+        self.boardResetButton.clicked.connect(self.moveListWidget.clear)
         self.getFenButton.clicked.connect(self.algorithm.getBoardState)
         self.getFenButton.clicked.connect(self.fenField.repaint)
         self.setFenButton.clicked.connect(self.setFen4)
@@ -101,28 +102,146 @@ class MainWindow(QMainWindow, Ui_mainWindow):
             self.view.removeHighlight(self.selectedSquare)
             self.selectedSquare = 0
 
+    def keyPressEvent(self, event):
+        """Handles arrow key press events to go to previous, next, first or last move."""
+        if event.key() == Qt.Key_Left:
+            self.algorithm.prevMove()
+        if event.key() == Qt.Key_Right:
+            self.algorithm.nextMove()
+        if event.key() == Qt.Key_Up:
+            self.algorithm.firstMove()
+        if event.key() == Qt.Key_Down:
+            self.algorithm.lastMove()
+
     def setFen4(self):
         """Gets FEN4 from the text field to set the board accordingly."""
         fen4 = self.fenField.toPlainText()
         self.algorithm.setBoardState(fen4)
         self.view.repaint()  # Forced repaint
 
-    def updateMoveTree(self, node, parent=None):
-        """Traverses through the move tree and constructs the move tree widget accordingly."""
-        # The node is a nested list with move strings, i.e. node = ['parent', [children]]
-        if not parent:
-            # If no parent, it is the root. The entire move tree is redrawn, so it should be cleared first.
-            self.moveTreeWidget.clear()
-            parent = QTreeWidgetItem(self.moveTreeWidget)
-            self.moveTreeWidget.setRootIndex(self.moveTreeWidget.indexFromItem(parent))
-        parentName = node[0]
-        parent.setText(0, parentName)
-        parent.setExpanded(True)
+    def updateMoveTree(self, node):
+        """Constructs the move list based on the move tree."""
+        # Custom QListWidget class for rows in main list
+        class Row(QListWidget):
+            def __init__(self):
+                super().__init__()
+                self.setFlow(QListView.LeftToRight)
+                self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+                self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+                self.setWrapping(True)
+                self.setFrameShape(QFrame.NoFrame)
+                self.setSelectionMode(QAbstractItemView.NoSelection)
+                self.setStyleSheet("color: rgb(0, 0, 0); font-weight: bold; font-size: 12; padding: 2px;")
+
+            def sizeHint(self):
+                """Overrides sizeHint() method."""
+                # TODO implement more accurate sizeHint
+                return QSize(300, 20 * (self.count()//7+1))  # Based on estimated number of moves per line
+
+        # FIXME debug move list, when moving back and playing the same moves
+        # List moves with move number and variation root and number (tuple), i.e. [(moveNum, move, root, var), (...)]
+        moves = self.traverse(node)
+        self.moveListWidget.clear()
+        row = Row()
+        prev = 0
+        i = 0
+        while i < len(moves):
+            # Same variation -> continue
+            if moves[i][-1] == prev:
+                flag = (moves[i][0] - 1) % 4
+                if flag == 0:
+                    moveNum = str((moves[i][0] - 1) // 4 + 1) + '. '
+                else:
+                    moveNum = ''
+                move = QListWidgetItem(moveNum + moves[i][1] + ' ')
+                row.addItem(move)
+            # New variation
+            elif moves[i][-1] > prev:
+                item = QListWidgetItem(self.moveListWidget)
+                item.setSizeHint(row.sizeHint())
+                self.moveListWidget.addItem(item)
+                self.moveListWidget.setItemWidget(item, row)
+                # Start of variation -> prepend opening bracket and three dots if no move number displayed
+                flag = ((moves[i][0] - 1) % 4)
+                if flag == 0:  # Red's move
+                    moveNum = str((moves[i][0] - 1) // 4 + 1) + '. '
+                elif flag == 1:  # Blue's move, add one dot
+                    moveNum = str((moves[i][0] - 1) // 4 + 1) + '. . '
+                elif flag == 2:  # Yellow's move, add two dots
+                    moveNum = str((moves[i][0] - 1) // 4 + 1) + '. .. '
+                else:  # Green's move, add three dots
+                    moveNum = str((moves[i][0] - 1) // 4 + 1) + '. ... '
+                move = QListWidgetItem('(' + moveNum + moves[i][1] + ' ')
+                row = Row()
+                if moves[i][-1] > 1:
+                    row.setStyleSheet("color: rgb(150, 150, 150); font-weight: bold; font-size: 12; "
+                                      "background-color: rgb(240, 240, 240); padding: 2px;")
+                else:
+                    row.setStyleSheet("color: rgb(100, 100, 100); font-weight: bold; font-size: 12; "
+                                      "background-color: rgb(240, 240, 240); padding: 2px;")
+                row.addItem(move)
+            # End of variation, returning to previous variation
+            elif moves[i][-1] < prev:
+                # End of variation -> remove last space and append closing brackets
+                row.item(row.count() - 1).setText(row.item(row.count() - 1).text()[:-1] + ')' * (prev - moves[i][-1]))
+                item = QListWidgetItem(self.moveListWidget)
+                item.setSizeHint(row.sizeHint())
+                self.moveListWidget.addItem(item)
+                self.moveListWidget.setItemWidget(item, row)
+                flag = ((moves[i][0] - 1) % 4 == 0)
+                if flag:
+                    moveNum = str((moves[i][0] - 1) // 4 + 1) + '. '
+                else:
+                    moveNum = ''
+                move = QListWidgetItem(moveNum + moves[i][1] + ' ')
+                row = Row()
+                if moves[i][-1] == 0:
+                    pass  # Keep black color for main line
+                elif moves[i][-1] > 1:
+                    row.setStyleSheet("color: rgb(150, 150, 150); font-weight: bold; font-size: 12; "
+                                      "background-color: rgb(240, 240, 240); padding: 2px;")
+                else:
+                    row.setStyleSheet("color: rgb(100, 100, 100); font-weight: bold; font-size: 12; "
+                                      "background-color: rgb(240, 240, 240); padding: 2px;")
+                row.addItem(move)
+            # End of move list -> append rest of main line moves
+            if i+1 == len(moves):
+                item = QListWidgetItem(self.moveListWidget)
+                item.setSizeHint(row.sizeHint())
+                self.moveListWidget.addItem(item)
+                self.moveListWidget.setItemWidget(item, row)
+            prev = moves[i][-1]
+            i += 1
+
+    def traverse(self, node, moves=[], moveNum=0, root=None, var=0):
+        """Traverses move tree to create list of moves, sorted by move number and variation (incl. variation root)."""
+        # The tree is represented as a nested list with move strings, i.e. node = ['parent', [children]]
+        parent = node[0]
+        if not root:
+            root = parent
         children = node[1]
         if children:
-            for childNode in children:
-                child = QTreeWidgetItem(parent)
-                self.updateMoveTree(childNode, child)
+            for child in children:
+                self.traverse(child, moves, moveNum + 1, root, var)
+                var += 1
+                root = parent
+        elif not moves.count((moveNum, parent, root, var)):
+            moves.append((moveNum, parent, root, var))
+        # Sort moves: insert variations after the main line move
+        i = 0
+        while i < len(moves):
+            variations = [var for var in moves if var[2] == moves[i][1]]
+            # Sort variations by move and variation number
+            variations = sorted(variations, key=lambda element: (element[-1], element[0]))
+            moves = moves[:i+2] + variations + moves[i+2:]
+            # Remove duplicate elements from the back
+            moves.reverse()
+            for move in moves:
+                while moves.count(move) > 1:
+                    moves.remove(move)
+            moves.reverse()
+            i += 1
+        return moves
 
 
 class Board(QObject):
