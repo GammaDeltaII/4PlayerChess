@@ -1,0 +1,14 @@
+[Event "Four-Player Chess Teams"]
+[Site "chess.com"]
+[Date "2018.06.08"]
+[Red "GDII"]
+[Blue "Blue"]
+[Yellow "Yellow"]
+[Green "Green"]
+[Result "*"]
+[PlyCount "27"]
+[TimeControl "60 d15"]
+[Mode "ICS"]
+[CurrentPosition "3yR1yByK1yB1yR3/3yPyPyPyP1yPyPyP3/5yN1yP2yN3/bRbP10gPgR/1bP10gPgN/bBbPbN8gP1gB/bK1bP9gP1/1bP7yQ2gPgK/bB1bNbP8gPgB/1bP6rQ3gP1/bRbP10gPgR/4rP2rP6/3rP1rPrP1rKrPrP3/3rRrNrB2rBrNrR3 g - - 27 7 "]
+
+1. h3 d6 h12 l9 2. e3 c8 Qh13 Nl6 3. Qk5 Nc6 Nf12 Ql10 4. Qk7 Qb8 Nk12 Qi10 5. Qm9 Qd10 Qj11 Qxj11 (5. ... Qxf13 6. Qxn9 Qxf12 Kh14 (5. ... l7 6. Qn8 Qxf12 Qk11 (5. ... Qxi2 6. Kxi2 Qi5 Qj12 Nj7 7. Qxi5 Nc9 Qxj7) ) ) 6. Qxn9 *
