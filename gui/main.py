@@ -19,10 +19,11 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from PyQt5.QtWidgets import QWidget, QMainWindow, QSizePolicy, QLayout, QListWidget, QListWidgetItem, QListView, \
-    QFrame, QAbstractItemView
-from PyQt5.QtCore import Qt, QObject, QSize, QRect, QPoint, pyqtSignal
-from PyQt5.QtGui import QPainter, QPalette, QIcon, QColor
+    QFrame, QAbstractItemView, QFileDialog, QPushButton, QLineEdit
+from PyQt5.QtCore import Qt, QObject, QSize, QRect, QPoint, pyqtSignal, QEvent
+from PyQt5.QtGui import QPainter, QPalette, QIcon, QColor, QFont, QFontMetrics
 from collections import deque
+from datetime import date
 from ui.mainwindow import Ui_mainWindow
 
 
@@ -55,7 +56,10 @@ class MainWindow(QMainWindow, Ui_mainWindow):
         self.algorithm.boardChanged.connect(self.view.setBoard)  # If algorithm changes board, view must update board
         self.algorithm.currentPlayerChanged.connect(self.view.highlightPlayer)
         self.algorithm.fen4Generated.connect(self.fenField.setPlainText)
+        self.algorithm.pgn4Generated.connect(self.pgnField.setPlainText)
         self.algorithm.moveTreeChanged.connect(self.updateMoveTree)
+        self.algorithm.moveTreeChanged.connect(self.algorithm.updateMoves)
+        self.view.playerNameEdited.connect(self.algorithm.updatePlayerNames)
 
         # Connect actions
         self.actionQuit.triggered.connect(self.close)
@@ -69,9 +73,12 @@ class MainWindow(QMainWindow, Ui_mainWindow):
         self.boardResetButton.clicked.connect(self.algorithm.newGame)
         self.boardResetButton.clicked.connect(self.view.repaint)  # Forced repaint
         self.boardResetButton.clicked.connect(self.moveListWidget.clear)
+        self.boardResetButton.clicked.connect(self.resetMoves)
         self.getFenButton.clicked.connect(self.algorithm.getBoardState)
         self.getFenButton.clicked.connect(self.fenField.repaint)
         self.setFenButton.clicked.connect(self.setFen4)
+        self.getPgnButton.clicked.connect(self.algorithm.getPgn4)
+        self.savePgnButton.clicked.connect(self.saveFileDialog)
         self.prevMoveButton.clicked.connect(self.algorithm.prevMove)
         self.prevMoveButton.clicked.connect(self.view.repaint)
         self.nextMoveButton.clicked.connect(self.algorithm.nextMove)
@@ -84,9 +91,14 @@ class MainWindow(QMainWindow, Ui_mainWindow):
         # Start new game
         self.algorithm.newGame()
 
-        # Initialize clicked point and highlighted square
+        # Initialize variables
         self.clickPoint = QPoint()
         self.selectedSquare = 0
+        self.moves = []
+
+    def resetMoves(self):
+        """Clears the list of moves if the board is reset."""
+        self.moves = []
 
     def viewClicked(self, square):
         """Handles user click event to move clicked piece to clicked square."""
@@ -113,6 +125,17 @@ class MainWindow(QMainWindow, Ui_mainWindow):
         if event.key() == Qt.Key_Down:
             self.algorithm.lastMove()
 
+    def saveFileDialog(self):
+        options = QFileDialog.Options()
+        options |= QFileDialog.DontUseNativeDialog
+        # noinspection PyTypeChecker,PyCallByClass
+        fileName, _ = QFileDialog.getSaveFileName(self, "Save Game", "data/games/",
+                                                  "PGN4 Files (*.pgn4)", options=options)
+        if fileName:
+            with open(fileName + '.pgn4', 'w') as file:
+                pgn4 = self.pgnField.toPlainText()
+                file.writelines(pgn4)
+
     def setFen4(self):
         """Gets FEN4 from the text field to set the board accordingly."""
         fen4 = self.fenField.toPlainText()
@@ -131,115 +154,214 @@ class MainWindow(QMainWindow, Ui_mainWindow):
                 self.setWrapping(True)
                 self.setFrameShape(QFrame.NoFrame)
                 self.setSelectionMode(QAbstractItemView.NoSelection)
-                self.setStyleSheet("color: rgb(0, 0, 0); font-weight: bold; font-size: 12; padding: 2px;")
+                self.setFocusPolicy(Qt.NoFocus)
+                self.setStyleSheet("color: rgb(0, 0, 0); font-family: Arial; font-weight: bold; font-size: 12; "
+                                   "padding: 2px; margin: 0px;")
 
             def sizeHint(self):
                 """Overrides sizeHint() method."""
-                # TODO implement more accurate sizeHint
-                return QSize(300, 20 * (self.count()//7+1))  # Based on estimated number of moves per line
+                fm = QFontMetrics(QFont('Arial', 12))  # 12pt = 16px
+                spacing = 17  # Guess
+                rowWidth = sum(fm.width(self.item(index).text()) + spacing for index in range(self.count()))
+                width = 295
+                height = 22 * (rowWidth // width + 1)
+                return QSize(width, height)
 
-        # FIXME debug move list, when moving back and playing the same moves
-        # List moves with move number and variation root and number (tuple), i.e. [(moveNum, move, root, var), (...)]
-        moves = self.traverse(node)
+        # List moves with move number and variation root and number (tuple), i.e. [(moveNum, move, rootNum, root, var)]
+        moves = self.traverse(node, self.moves)
+        self.moves = moves
         self.moveListWidget.clear()
+        mainLineRoot = (0, 'root')
+        mainline = [move[:2] for move in moves if move[-3:] == (mainLineRoot[0], mainLineRoot[1], 0)]
+        prevVar = 0
+        prevRoot = mainLineRoot
+        roots = [prevRoot]
         row = Row()
-        prev = 0
-        i = 0
-        while i < len(moves):
-            # Same variation -> continue
-            if moves[i][-1] == prev:
-                flag = (moves[i][0] - 1) % 4
-                if flag == 0:
-                    moveNum = str((moves[i][0] - 1) // 4 + 1) + '. '
+        for move in moves:
+            root = move[-3:-1]
+            var = move[-1]
+            # Same variation root
+            if root == prevRoot:
+                # Same variation number
+                if var == prevVar:
+                    flag = (move[0] - 1) % 4
+                    if flag == 0:
+                        moveNum = str((move[0] - 1) // 4 + 1) + '. '
+                    else:
+                        moveNum = ''
+                    if root == mainLineRoot and var == 0:
+                        sep = ' '
+                    else:
+                        # Remove closing bracket from previous move, if present
+                        if row.item(row.count() - 1).text()[-2] == ')':
+                            row.item(row.count() - 1).setText(row.item(row.count() - 1).text()[:-2] + ' ')
+                        sep = ') '
+                    moveItem = QListWidgetItem(moveNum + move[1] + sep)
+                    row.addItem(moveItem)
+                # Higher variation number = new variation from same root
+                elif var > prevVar:
+                    item = QListWidgetItem(self.moveListWidget)
+                    item.setSizeHint(row.sizeHint())
+                    self.moveListWidget.addItem(item)
+                    self.moveListWidget.setItemWidget(item, row)
+                    # Start of variation -> prepend opening bracket and add 1, 2 or 3 dots, depending on current player
+                    flag = ((move[0] - 1) % 4)
+                    if flag == 0:  # Red's move
+                        moveNum = str((move[0] - 1) // 4 + 1) + '. '
+                    elif flag == 1:  # Blue's move, add one dot
+                        moveNum = str((move[0] - 1) // 4 + 1) + '. . '
+                    elif flag == 2:  # Yellow's move, add two dots
+                        moveNum = str((move[0] - 1) // 4 + 1) + '. .. '
+                    else:  # Green's move, add three dots
+                        moveNum = str((move[0] - 1) // 4 + 1) + '. ... '
+                    if root == mainLineRoot and var == 0:
+                        sep = ' '
+                    else:
+                        sep = ') '
+                    moveItem = QListWidgetItem('(' + moveNum + move[1] + sep)
+                    row = Row()
+                    if root in mainline or root == mainLineRoot:
+                        row.setStyleSheet("color: rgb(100, 100, 100); font-weight: bold; font-size: 12; "
+                                          "background-color: rgb(240, 240, 240); padding: 2px; margin: 0px;")
+                    else:
+                        row.setStyleSheet("color: rgb(150, 150, 150); font-weight: bold; font-size: 12; "
+                                          "background-color: rgb(240, 240, 240); padding: 2px; margin: 0px;")
+                    row.addItem(moveItem)
+                # Lower variation number = returning to previous variation with same root
+                elif var < prevVar:
+                    item = QListWidgetItem(self.moveListWidget)
+                    item.setSizeHint(row.sizeHint())
+                    self.moveListWidget.addItem(item)
+                    self.moveListWidget.setItemWidget(item, row)
+                    flag = ((move[0] - 1) % 4 == 0)
+                    if flag:
+                        moveNum = str((move[0] - 1) // 4 + 1) + '. '
+                    else:
+                        moveNum = ''
+                    if root == mainLineRoot and var == 0:
+                        sep = ' '
+                    else:
+                        sep = ') '
+                    moveItem = QListWidgetItem(moveNum + move[1] + sep)
+                    row = Row()
+                    if root == mainLineRoot:
+                        pass
+                    elif root in mainline:
+                        row.setStyleSheet("color: rgb(100, 100, 100); font-weight: bold; font-size: 12; "
+                                          "background-color: rgb(240, 240, 240); padding: 2px; margin: 0px;")
+                    else:
+                        row.setStyleSheet("color: rgb(150, 150, 150); font-weight: bold; font-size: 12; "
+                                          "background-color: rgb(240, 240, 240); padding: 2px; margin: 0px;")
+                    row.addItem(moveItem)
+            # Different variation root
+            else:
+                if root not in roots:
+                    roots.append(root)
+                    roots.sort()
+                # If variation root has higher move number than previous, start new variation
+                if root[0] > prevRoot[0]:
+                    # Remove closing bracket from previous move, if present
+                    if row.item(row.count() - 1).text()[-2] == ')':
+                        row.item(row.count() - 1).setText(row.item(row.count() - 1).text()[:-2] + ' ')
+                    item = QListWidgetItem(self.moveListWidget)
+                    item.setSizeHint(row.sizeHint())
+                    self.moveListWidget.addItem(item)
+                    self.moveListWidget.setItemWidget(item, row)
+                    # Start of variation -> prepend opening bracket and add 1, 2 or 3 dots, depending on current player
+                    flag = ((move[0] - 1) % 4)
+                    if flag == 0:  # Red's move
+                        moveNum = str((move[0] - 1) // 4 + 1) + '. '
+                    elif flag == 1:  # Blue's move, add one dot
+                        moveNum = str((move[0] - 1) // 4 + 1) + '. . '
+                    elif flag == 2:  # Yellow's move, add two dots
+                        moveNum = str((move[0] - 1) // 4 + 1) + '. .. '
+                    else:  # Green's move, add three dots
+                        moveNum = str((move[0] - 1) // 4 + 1) + '. ... '
+                    moveItem = QListWidgetItem('(' + moveNum + move[1] + ') ')
+                    row = Row()
+                    if root in mainline:
+                        row.setStyleSheet("color: rgb(100, 100, 100); font-weight: bold; font-size: 12; "
+                                          "background-color: rgb(240, 240, 240); padding: 2px; margin: 0px;")
+                    else:
+                        row.setStyleSheet("color: rgb(150, 150, 150); font-weight: bold; font-size: 12; "
+                                          "background-color: rgb(240, 240, 240); padding: 2px; margin: 0px;")
+                    row.addItem(moveItem)
+                # If variation root has lower move number than previous, return to previous variation
                 else:
-                    moveNum = ''
-                move = QListWidgetItem(moveNum + moves[i][1] + ' ')
-                row.addItem(move)
-            # New variation
-            elif moves[i][-1] > prev:
-                item = QListWidgetItem(self.moveListWidget)
-                item.setSizeHint(row.sizeHint())
-                self.moveListWidget.addItem(item)
-                self.moveListWidget.setItemWidget(item, row)
-                # Start of variation -> prepend opening bracket and three dots if no move number displayed
-                flag = ((moves[i][0] - 1) % 4)
-                if flag == 0:  # Red's move
-                    moveNum = str((moves[i][0] - 1) // 4 + 1) + '. '
-                elif flag == 1:  # Blue's move, add one dot
-                    moveNum = str((moves[i][0] - 1) // 4 + 1) + '. . '
-                elif flag == 2:  # Yellow's move, add two dots
-                    moveNum = str((moves[i][0] - 1) // 4 + 1) + '. .. '
-                else:  # Green's move, add three dots
-                    moveNum = str((moves[i][0] - 1) // 4 + 1) + '. ... '
-                move = QListWidgetItem('(' + moveNum + moves[i][1] + ' ')
-                row = Row()
-                if moves[i][-1] > 1:
-                    row.setStyleSheet("color: rgb(150, 150, 150); font-weight: bold; font-size: 12; "
-                                      "background-color: rgb(240, 240, 240); padding: 2px;")
-                else:
-                    row.setStyleSheet("color: rgb(100, 100, 100); font-weight: bold; font-size: 12; "
-                                      "background-color: rgb(240, 240, 240); padding: 2px;")
-                row.addItem(move)
-            # End of variation, returning to previous variation
-            elif moves[i][-1] < prev:
-                # End of variation -> remove last space and append closing brackets
-                row.item(row.count() - 1).setText(row.item(row.count() - 1).text()[:-1] + ')' * (prev - moves[i][-1]))
-                item = QListWidgetItem(self.moveListWidget)
-                item.setSizeHint(row.sizeHint())
-                self.moveListWidget.addItem(item)
-                self.moveListWidget.setItemWidget(item, row)
-                flag = ((moves[i][0] - 1) % 4 == 0)
-                if flag:
-                    moveNum = str((moves[i][0] - 1) // 4 + 1) + '. '
-                else:
-                    moveNum = ''
-                move = QListWidgetItem(moveNum + moves[i][1] + ' ')
-                row = Row()
-                if moves[i][-1] == 0:
-                    pass  # Keep black color for main line
-                elif moves[i][-1] > 1:
-                    row.setStyleSheet("color: rgb(150, 150, 150); font-weight: bold; font-size: 12; "
-                                      "background-color: rgb(240, 240, 240); padding: 2px;")
-                else:
-                    row.setStyleSheet("color: rgb(100, 100, 100); font-weight: bold; font-size: 12; "
-                                      "background-color: rgb(240, 240, 240); padding: 2px;")
-                row.addItem(move)
-            # End of move list -> append rest of main line moves
-            if i+1 == len(moves):
-                item = QListWidgetItem(self.moveListWidget)
-                item.setSizeHint(row.sizeHint())
-                self.moveListWidget.addItem(item)
-                self.moveListWidget.setItemWidget(item, row)
-            prev = moves[i][-1]
-            i += 1
+                    # Add closing bracket(s) if moving out of multiple variations
+                    step = roots.index(prevRoot) - roots.index(root)
+                    if step > 1 and roots.index(root) != 0:
+                        row.item(row.count() - 1).setText(row.item(row.count() - 1).text()[:-1] + ')'*(step - 1) + ' ')
+                    item = QListWidgetItem(self.moveListWidget)
+                    item.setSizeHint(row.sizeHint())
+                    self.moveListWidget.addItem(item)
+                    self.moveListWidget.setItemWidget(item, row)
+                    flag = ((move[0] - 1) % 4 == 0)
+                    if flag:
+                        moveNum = str((move[0] - 1) // 4 + 1) + '. '
+                    else:
+                        moveNum = ''
+                    if root == mainLineRoot and var == 0:
+                        sep = ' '
+                    else:
+                        sep = ') '
+                    moveItem = QListWidgetItem(moveNum + move[1] + sep)
+                    row = Row()
+                    if root == mainLineRoot:
+                        pass
+                    elif root in mainline:
+                        row.setStyleSheet("color: rgb(100, 100, 100); font-weight: bold; font-size: 12; "
+                                          "background-color: rgb(240, 240, 240); padding: 2px; margin: 0px;")
+                    else:
+                        row.setStyleSheet("color: rgb(150, 150, 150); font-weight: bold; font-size: 12; "
+                                          "background-color: rgb(240, 240, 240); padding: 2px; margin: 0px;")
+                    row.addItem(moveItem)
+                prevRoot = root
+            prevVar = var
+        # End of move list -> append rest of main line moves
+        item = QListWidgetItem(self.moveListWidget)
+        item.setSizeHint(row.sizeHint())
+        self.moveListWidget.addItem(item)
+        self.moveListWidget.setItemWidget(item, row)
 
-    def traverse(self, node, moves=[], moveNum=0, root=None, var=0):
+    def traverse(self, node, moves=None, moveNum=0, rootNum=0, root=None, var=0, rootNode=None):
         """Traverses move tree to create list of moves, sorted by move number and variation (incl. variation root)."""
         # The tree is represented as a nested list with move strings, i.e. node = ['parent', [children]]
         parent = node[0]
         if not root:
             root = parent
+        if not rootNode:
+            rootNode = node
+        if not moves:
+            moves = self.moves
         children = node[1]
         if children:
             for child in children:
-                self.traverse(child, moves, moveNum + 1, root, var)
+                self.traverse(child, moves, moveNum + 1, rootNum, root, var, rootNode)
                 var += 1
-                root = parent
-        elif not moves.count((moveNum, parent, root, var)):
-            moves.append((moveNum, parent, root, var))
-        # Sort moves: insert variations after the main line move
+                # Root should be first element of previous level -> go back to previous node with multiple children
+                root = parent  # FIXME root of variation is not necessarily previous move
+                rootNum = moveNum
+        elif not moves.count((moveNum, parent, rootNum, root, var)):
+            moves.append((moveNum, parent, rootNum, root, var))
+        # Sort moves: insert variations after the main move
+        prevVars = []
         i = 0
         while i < len(moves):
-            variations = [var for var in moves if var[2] == moves[i][1]]
-            # Sort variations by move and variation number
-            variations = sorted(variations, key=lambda element: (element[-1], element[0]))
-            moves = moves[:i+2] + variations + moves[i+2:]
+            varMoves = [var for var in moves if var[-2] == moves[i][1]]
+            varMoves = sorted(varMoves, key=lambda element: (element[-1], element[0]))
+            if prevVars:
+                shift = 2 + len(prevVars)
+            else:
+                shift = 2
+            moves = moves[:i+shift] + varMoves + moves[i+shift:]
             # Remove duplicate elements from the back
             moves.reverse()
             for move in moves:
                 while moves.count(move) > 1:
                     moves.remove(move)
             moves.reverse()
+            prevVars = varMoves
             i += 1
         return moves
 
@@ -353,19 +475,26 @@ class Algorithm(QObject):
     gameOver = pyqtSignal(str)
     currentPlayerChanged = pyqtSignal(str)
     fen4Generated = pyqtSignal(str)
+    pgn4Generated = pyqtSignal(str)
     moveTreeChanged = pyqtSignal(list)
 
-    NoResult, Team1Wins, Team2Wins, Draw = ['NoResult', 'Team1Wins', 'Team2Wins', 'Draw']  # Results
-    NoPlayer, Red, Blue, Yellow, Green = ['NoPlayer', 'r', 'b', 'y', 'g']  # Players
+    NoResult, Team1Wins, Team2Wins, Draw = ['*', '1-0', '0-1', '1/2-1/2']  # Results
+    NoPlayer, Red, Blue, Yellow, Green = ['?', 'r', 'b', 'y', 'g']  # Players
     playerQueue = deque([Red, Blue, Yellow, Green])
 
     def __init__(self):
         super().__init__()
+        self.variant = '?'
         self.board = Board(14, 14)
         self.result = self.NoResult
         self.currentPlayer = self.NoPlayer
         self.moveNumber = 0
         self.currentMove = self.Node('root', [], None)
+        self.moves = []
+        self.redName = self.NoPlayer
+        self.blueName = self.NoPlayer
+        self.yellowName = self.NoPlayer
+        self.greenName = self.NoPlayer
 
     class Node:
         """Generic node class. Basic element of a tree."""
@@ -393,10 +522,17 @@ class Algorithm(QObject):
             tree = [self.name, [child.getTree() for child in self.children]]
             return tree
 
+    def updatePlayerNames(self, red, blue, yellow, green):
+        self.redName = red if not red == 'Player Name' else '?'
+        self.blueName = blue if not blue == 'Player Name' else '?'
+        self.yellowName = yellow if not yellow == 'Player Name' else '?'
+        self.greenName = green if not green == 'Player Name' else '?'
+
     def resetMoves(self):
         """Resets current move to root and move number to zero."""
         self.moveNumber = 0
         self.currentMove = self.Node('root', [], None)
+        self.moves = []
 
     def setResult(self, value):
         """Updates game result, if changed."""
@@ -448,8 +584,14 @@ class Algorithm(QObject):
         """Gets FEN4 from current board state."""
         fen4 = self.board.getFen4()
         # Append character for current player
-        fen4 += self.currentPlayer
+        fen4 += self.currentPlayer + ' '
+        # TODO implement castling availability and en passant target square
+        fen4 += '- '  # "K" if kingside castling available, "Q" if queenside, "-" if no player can castle
+        fen4 += '- '  # En passant target square
+        fen4 += str(self.moveNumber) + ' '  # Number of quarter-moves
+        fen4 += str(self.moveNumber // 4 + 1) + ' '  # Number of full moves, starting from 1
         self.fen4Generated.emit(fen4)
+        return fen4
 
     def setBoardState(self, fen4):
         """Sets board according to FEN4."""
@@ -550,11 +692,132 @@ class Algorithm(QObject):
         """This method must be overridden to define the proper logic corresponding to the game type (Teams or FFA)."""
         return False
 
+    def getPgn4(self):
+        """Generates PGN4 from current game."""
+        pgn4 = ''
+
+        # Standard tags, ("?" if data unknown, "-" if not applicable)
+        pgn4 += '[Event "Four-Player Chess ' + self.variant + '"]\n'
+        pgn4 += '[Site "chess.com"]\n'
+        pgn4 += '[Date "' + date.today().strftime('%Y.%m.%d') + '"]\n'
+        # pgn4 += '[Round "-"]\n'
+        pgn4 += '[Red "' + self.redName + '"]\n'
+        pgn4 += '[Blue "' + self.blueName + '"]\n'
+        pgn4 += '[Yellow "' + self.yellowName + '"]\n'
+        pgn4 += '[Green "' + self.greenName + '"]\n'
+        pgn4 += '[Result "' + self.result + '"]\n'  # 1-0 (r & y win), 0-1 (b & g win), 1/2-1/2 (draw), * (no result)
+
+        # Supplemental tags
+        # pgn4 += '[RedElo "?"]\n'
+        # pgn4 += '[BlueElo "?"]\n'
+        # pgn4 += '[YellowElo "?"]\n'
+        # pgn4 += '[GreenElo "?"]\n'
+        pgn4 += '[PlyCount "' + str(self.moveNumber) + '"]\n'  # Total number of quarter-moves
+        pgn4 += '[TimeControl "60 d15"]\n'  # 60 seconds sudden death with 15 seconds delay per move
+        pgn4 += '[Mode "ICS"]\n'  # ICS = Internet Chess Server, OTB = Over-The-Board
+        pgn4 += '[CurrentPosition "' + self.getBoardState() + '"]\n'
+        pgn4 += '\n'
+
+        # Movetext
+        moves = self.moves
+        moveList = []
+        row = []
+        prev = 0
+        i = 0
+        while i < len(moves):
+            # Same variation -> continue
+            if moves[i][-1] == prev:
+                flag = (moves[i][0] - 1) % 4
+                if flag == 0:
+                    moveNum = str((moves[i][0] - 1) // 4 + 1) + '. '
+                else:
+                    moveNum = ''
+                move = moveNum + moves[i][1] + ' '
+                row.append(move)
+            # New variation
+            elif moves[i][-1] > prev:
+                moveList.append(row)
+                # Start of variation -> prepend opening bracket and add 1, 2 or 3 dots, depending on current player
+                flag = ((moves[i][0] - 1) % 4)
+                if flag == 0:  # Red's move
+                    moveNum = str((moves[i][0] - 1) // 4 + 1) + '. '
+                elif flag == 1:  # Blue's move, add one dot
+                    moveNum = str((moves[i][0] - 1) // 4 + 1) + '. . '
+                elif flag == 2:  # Yellow's move, add two dots
+                    moveNum = str((moves[i][0] - 1) // 4 + 1) + '. .. '
+                else:  # Green's move, add three dots
+                    moveNum = str((moves[i][0] - 1) // 4 + 1) + '. ... '
+                move = '(' + moveNum + moves[i][1] + ' '
+                row = list()
+                row.append(move)
+            # End of variation, returning to previous variation
+            elif moves[i][-1] < prev:
+                # End of variation -> remove last space and append closing brackets
+                row[-1] = row[-1][:-1] + ') ' * (prev - moves[i][-1])
+                moveList.append(row)
+                flag = ((moves[i][0] - 1) % 4 == 0)
+                if flag:
+                    moveNum = str((moves[i][0] - 1) // 4 + 1) + '. '
+                else:
+                    moveNum = ''
+                move = moveNum + moves[i][1] + ' '
+                row = list()
+                row.append(move)
+            # End of move list -> append rest of main line moves
+            if i + 1 == len(moves):
+                moveList.append(row)
+            prev = moves[i][-1]
+            i += 1
+        for sublist in moveList:
+            for move in sublist:
+                pgn4 += move
+        # Append result
+        pgn4 += self.result
+        self.pgn4Generated.emit(pgn4)
+
+    def updateMoves(self, tree):
+        moves = self.traverse(tree)
+        self.moves = moves
+
+    # TODO copied from MainWindow class -> possible to integrate and get rid of duplicate method?
+    def traverse(self, node, moves=None, moveNum=0, root=None, var=0):
+        """Traverses move tree to create list of moves, sorted by move number and variation (incl. variation root)."""
+        # The tree is represented as a nested list with move strings, i.e. node = ['parent', [children]]
+        parent = node[0]
+        if not root:
+            root = parent
+        if not moves:
+            moves = self.moves
+        children = node[1]
+        if children:
+            for child in children:
+                self.traverse(child, moves, moveNum + 1, root, var)
+                var += 1
+                root = parent
+        elif not moves.count((moveNum, parent, root, var)):
+            moves.append((moveNum, parent, root, var))
+        # Sort moves: insert variations after the main line move
+        i = 0
+        while i < len(moves):
+            variations = [var for var in moves if var[2] == moves[i][1]]
+            # Sort variations by move and variation number
+            variations = sorted(variations, key=lambda element: (element[-1], element[0]))
+            moves = moves[:i+2] + variations + moves[i+2:]
+            # Remove duplicate elements from the back
+            moves.reverse()
+            for move in moves:
+                while moves.count(move) > 1:
+                    moves.remove(move)
+            moves.reverse()
+            i += 1
+        return moves
+
 
 class Teams(Algorithm):
     """A subclass of Algorithm for the 4-player chess Teams variant."""
     def __init__(self):
         super().__init__()
+        self.variant = 'Teams'
 
     def makeMove(self, fromFile, fromRank, toFile, toRank):
         """Moves piece from square (fromFile, fromRank) to square (toFile, toRank), if the move is valid."""
@@ -628,6 +891,7 @@ class FFA(Algorithm):
     # TODO implement FFA class
     def __init__(self):
         super().__init__()
+        self.variant = 'Free-For-All'
 
 
 class View(QWidget):
@@ -635,6 +899,7 @@ class View(QWidget):
     underlying logic."""
     clicked = pyqtSignal(QPoint)
     squareSizeChanged = pyqtSignal(QSize)
+    playerNameEdited = pyqtSignal(str, str, str, str)
 
     def __init__(self):
         super().__init__()
@@ -646,6 +911,15 @@ class View(QWidget):
                                  'b': self.PlayerHighlight(1, 1, QColor('#4185bf')),
                                  'y': self.PlayerHighlight(1, 12, QColor('#c09526')),
                                  'g': self.PlayerHighlight(12, 12, QColor('#4e9161'))}
+        self.redName = None
+        self.redNameEdit = None
+        self.blueName = None
+        self.blueNameEdit = None
+        self.yellowName = None
+        self.yellowNameEdit = None
+        self.greenName = None
+        self.greenNameEdit = None
+        self.createPlayerLabels()
 
     class SquareHighlight:
         """A square highlight type."""
@@ -785,3 +1059,116 @@ class View(QWidget):
         """Clears list of highlights and redraws view."""
         self.highlights = []
         self.update()
+
+    class PlayerName(QPushButton):
+        def __init__(self):
+            super().__init__()
+            self.setFixedSize(150, 50)
+            # self.setFlat(True)
+            self.setText('Player Name')
+            self.setStyleSheet("""
+            QPushButton {border: none; font-weight: bold;}
+            QPushButton[player='red'] {color: #bf3b43;}
+            QPushButton[player='blue'] {color: #4185bf;}
+            QPushButton[player='yellow'] {color: #c09526;}
+            QPushButton[player='green'] {color: #4e9161;}
+            """)
+
+    class PlayerNameEdit(QLineEdit):
+        focusOut = pyqtSignal()
+
+        def __init__(self):
+            super().__init__()
+            self.setFixedSize(150, 50)
+            self.setAlignment(Qt.AlignCenter)
+            self.setFrame(False)
+            self.setAttribute(Qt.WA_MacShowFocusRect, 0)
+            self.installEventFilter(self)
+            self.setStyleSheet("""
+            QLineEdit {font-weight: bold;}
+            QLineEdit[player='red'] {color: #bf3b43;}
+            QLineEdit[player='blue'] {color: #4185bf;}
+            QLineEdit[player='yellow'] {color: #c09526;}
+            QLineEdit[player='green'] {color: #4e9161;}
+            """)
+
+        def eventFilter(self, object, event):
+            if event.type() == QEvent.FocusOut:
+                self.focusOut.emit()
+            return False
+
+    def createPlayerLabels(self):
+        # Red player
+        self.redName = self.PlayerName()
+        self.redName.setProperty('player', 'red')
+        self.redName.move(550, 650)
+        self.redName.setParent(self)
+        self.redName.show()
+        self.redName.clicked.connect(lambda: self.editPlayerName(self.redNameEdit))
+        self.redNameEdit = self.PlayerNameEdit()
+        self.redNameEdit.setProperty('player', 'red')
+        self.redNameEdit.move(550, 650)
+        self.redNameEdit.setParent(self)
+        self.redNameEdit.show()
+        self.redNameEdit.setHidden(True)
+        self.redNameEdit.returnPressed.connect(lambda: self.setPlayerName(self.redName))
+        self.redNameEdit.focusOut.connect(lambda: self.setPlayerName(self.redName))
+        # Blue player
+        self.blueName = self.PlayerName()
+        self.blueName.setProperty('player', 'blue')
+        self.blueName.move(0, 650)
+        self.blueName.setParent(self)
+        self.blueName.show()
+        self.blueName.clicked.connect(lambda: self.editPlayerName(self.blueNameEdit))
+        self.blueNameEdit = self.PlayerNameEdit()
+        self.blueNameEdit.setProperty('player', 'blue')
+        self.blueNameEdit.move(0, 650)
+        self.blueNameEdit.setParent(self)
+        self.blueNameEdit.show()
+        self.blueNameEdit.setHidden(True)
+        self.blueNameEdit.returnPressed.connect(lambda: self.setPlayerName(self.blueName))
+        self.blueNameEdit.focusOut.connect(lambda: self.setPlayerName(self.blueName))
+        # Yellow player
+        self.yellowName = self.PlayerName()
+        self.yellowName.setProperty('player', 'yellow')
+        self.yellowName.move(0, 0)
+        self.yellowName.setParent(self)
+        self.yellowName.show()
+        self.yellowName.clicked.connect(lambda: self.editPlayerName(self.yellowNameEdit))
+        self.yellowNameEdit = self.PlayerNameEdit()
+        self.yellowNameEdit.setProperty('player', 'yellow')
+        self.yellowNameEdit.move(0, 0)
+        self.yellowNameEdit.setParent(self)
+        self.yellowNameEdit.show()
+        self.yellowNameEdit.setHidden(True)
+        self.yellowNameEdit.returnPressed.connect(lambda: self.setPlayerName(self.yellowName))
+        self.yellowNameEdit.focusOut.connect(lambda: self.setPlayerName(self.yellowName))
+        # Green player
+        self.greenName = self.PlayerName()
+        self.greenName.setProperty('player', 'green')
+        self.greenName.move(550, 0)
+        self.greenName.setParent(self)
+        self.greenName.show()
+        self.greenName.clicked.connect(lambda: self.editPlayerName(self.greenNameEdit))
+        self.greenNameEdit = self.PlayerNameEdit()
+        self.greenNameEdit.setProperty('player', 'green')
+        self.greenNameEdit.move(550, 0)
+        self.greenNameEdit.setParent(self)
+        self.greenNameEdit.show()
+        self.greenNameEdit.setHidden(True)
+        self.greenNameEdit.returnPressed.connect(lambda: self.setPlayerName(self.greenName))
+        self.greenNameEdit.focusOut.connect(lambda: self.setPlayerName(self.greenName))
+
+    def editPlayerName(self, nameEdit):
+        name = self.sender()
+        name.setHidden(True)
+        nameEdit.setHidden(False)
+        nameEdit.setFocus(True)
+
+    def setPlayerName(self, name):
+        nameEdit = self.sender()
+        name.setText(nameEdit.text())
+        nameEdit.setHidden(True)
+        name.setHidden(False)
+        self.playerNameEdited.emit(self.redName.text(), self.blueName.text(), self.yellowName.text(),
+                                   self.greenName.text())
