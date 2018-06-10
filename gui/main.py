@@ -59,7 +59,9 @@ class MainWindow(QMainWindow, Ui_mainWindow):
         self.algorithm.pgn4Generated.connect(self.pgnField.setPlainText)
         self.algorithm.moveTreeChanged.connect(self.updateMoveTree)
         self.algorithm.moveTreeChanged.connect(self.algorithm.updateMoves)
+        self.algorithm.removeHighlight.connect(self.view.removeHighlightsOfColor)
         self.view.playerNameEdited.connect(self.algorithm.updatePlayerNames)
+        self.algorithm.addHighlight.connect(self.addHighlight)
 
         # Connect actions
         self.actionQuit.triggered.connect(self.close)
@@ -94,24 +96,60 @@ class MainWindow(QMainWindow, Ui_mainWindow):
         # Initialize variables
         self.clickPoint = QPoint()
         self.selectedSquare = 0
+        self.moveHighlight = 0
         self.moves = []
 
     def resetMoves(self):
         """Clears the list of moves if the board is reset."""
         self.moves = []
 
+    def addHighlight(self, fromFile, fromRank, toFile, toRank, color):
+        fromSquare = self.view.SquareHighlight(fromFile, fromRank, color)
+        self.view.addHighlight(fromSquare)
+        toSquare = self.view.SquareHighlight(toFile, toRank, color)
+        self.view.addHighlight(toSquare)
+
     def viewClicked(self, square):
         """Handles user click event to move clicked piece to clicked square."""
+        if self.algorithm.currentPlayer == self.algorithm.Red:
+            color = QColor('#66bf3b43')
+        elif self.algorithm.currentPlayer == self.algorithm.Blue:
+            color = QColor('#664185bf')
+        elif self.algorithm.currentPlayer == self.algorithm.Yellow:
+            color = QColor('#66c09526')
+        elif self.algorithm.currentPlayer == self.algorithm.Green:
+            color = QColor('#664e9161')
+        else:
+            color = QColor('#00000000')
         if self.clickPoint.isNull():
-            if self.view.board.getData(square.x(), square.y()) != ' ':
+            squareData = self.view.board.getData(square.x(), square.y())
+            if squareData != ' ' and squareData[0] == self.algorithm.currentPlayer:
                 self.clickPoint = square
-                self.selectedSquare = self.view.SquareHighlight(square.x(), square.y(), QColor(255, 255, 0, 50))
+                self.selectedSquare = self.view.SquareHighlight(square.x(), square.y(), color)
                 self.view.addHighlight(self.selectedSquare)
         else:
+            moved = False
             if square != self.clickPoint:
-                self.algorithm.makeMove(self.clickPoint.x(), self.clickPoint.y(), square.x(), square.y())
+                moved = self.algorithm.makeMove(self.clickPoint.x(), self.clickPoint.y(), square.x(), square.y())
             self.clickPoint = QPoint()
-            self.view.removeHighlight(self.selectedSquare)
+            if not moved:
+                self.view.removeHighlight(self.selectedSquare)
+            else:
+                self.moveHighlight = self.view.SquareHighlight(square.x(), square.y(), color)
+                self.view.addHighlight(self.moveHighlight)
+                # Remove highlights of next player
+                if self.algorithm.currentPlayer == self.algorithm.Red:
+                    color = QColor('#66bf3b43')
+                elif self.algorithm.currentPlayer == self.algorithm.Blue:
+                    color = QColor('#664185bf')
+                elif self.algorithm.currentPlayer == self.algorithm.Yellow:
+                    color = QColor('#66c09526')
+                elif self.algorithm.currentPlayer == self.algorithm.Green:
+                    color = QColor('#664e9161')
+                else:
+                    color = QColor('#00000000')
+                self.view.removeHighlightsOfColor(color)
+                self.moveHighlight = 0
             self.selectedSquare = 0
 
     def keyPressEvent(self, event):
@@ -477,6 +515,8 @@ class Algorithm(QObject):
     fen4Generated = pyqtSignal(str)
     pgn4Generated = pyqtSignal(str)
     moveTreeChanged = pyqtSignal(list)
+    removeHighlight = pyqtSignal(QColor)
+    addHighlight = pyqtSignal(int, int, int, int, QColor)
 
     NoResult, Team1Wins, Team2Wins, Draw = ['*', '1-0', '0-1', '1/2-1/2']  # Results
     NoPlayer, Red, Blue, Yellow, Green = ['?', 'r', 'b', 'y', 'g']  # Players
@@ -523,10 +563,10 @@ class Algorithm(QObject):
             return tree
 
     def updatePlayerNames(self, red, blue, yellow, green):
-        self.redName = red if not red == 'Player Name' else '?'
-        self.blueName = blue if not blue == 'Player Name' else '?'
-        self.yellowName = yellow if not yellow == 'Player Name' else '?'
-        self.greenName = green if not green == 'Player Name' else '?'
+        self.redName = red if not (red == 'Player Name' or red == '') else '?'
+        self.blueName = blue if not (blue == 'Player Name' or blue == '') else '?'
+        self.yellowName = yellow if not (yellow == 'Player Name' or yellow == '') else '?'
+        self.greenName = green if not (green == 'Player Name' or green == '') else '?'
 
     def resetMoves(self):
         """Resets current move to root and move number to zero."""
@@ -609,9 +649,9 @@ class Algorithm(QObject):
 
     def toAlgebraic(self, moveString):
         """Converts move string to algebraic notation."""
-        moveString = moveString[1:]
+        # moveString = moveString[1:]
         moveString = moveString.split()
-        if moveString[0] == 'P':
+        if moveString[0][0] == 'P':
             moveString.pop(0)
             if len(moveString) == 3:
                 moveString[0] = moveString[0][0]
@@ -619,10 +659,33 @@ class Algorithm(QObject):
             else:
                 moveString.pop(0)
         elif len(moveString) == 4:
-            moveString[2] = 'x'
-            moveString.remove(moveString[1])
+            # Castling move
+            if moveString[0][1] == 'K' and moveString[2][1] == 'R' and moveString[0][0] == moveString[2][0]:
+                fromFile = ord(moveString[1][0]) - 97
+                fromRank = int(moveString[1][1]) - 1
+                toFile = ord(moveString[3][0]) - 97
+                toRank = int(moveString[3][1]) - 1
+                if fromRank == toRank:
+                    # Kingside
+                    if abs(toFile - fromFile) == 3:
+                        moveString = 'O-O'
+                    # Queenside
+                    elif abs(toFile - fromFile) == 4:
+                        moveString = 'O-O-O'
+                elif fromFile == toFile:
+                    # Kingside
+                    if abs(toRank - fromRank) == 3:
+                        moveString = 'O-O'
+                    # Queenside
+                    elif abs(toRank - fromRank) == 4:
+                        moveString = 'O-O-O'
+            else:
+                moveString[2] = 'x'
+                moveString.remove(moveString[1])
         else:
             moveString.remove(moveString[1])
+        if moveString != 'O-O' and moveString != 'O-O-O':
+            moveString[0] = moveString[0][1]
         moveString = ''.join(moveString)
         return moveString
 
@@ -657,6 +720,18 @@ class Algorithm(QObject):
         self.moveNumber -= 1
         self.playerQueue.rotate(1)
         self.setCurrentPlayer(self.playerQueue[0])
+        # Signal View to remove last move highlight
+        if self.currentPlayer == self.Red:
+            color = QColor('#66bf3b43')
+        elif self.currentPlayer == self.Blue:
+            color = QColor('#664185bf')
+        elif self.currentPlayer == self.Yellow:
+            color = QColor('#66c09526')
+        elif self.currentPlayer == self.Green:
+            color = QColor('#664e9161')
+        else:
+            color = QColor('#00000000')
+        self.removeHighlight.emit(color)
 
     def nextMove(self):
         """Sets board state to next move."""
@@ -677,8 +752,31 @@ class Algorithm(QObject):
         self.board.setData(toFile, toRank, piece)
         self.currentMove = self.currentMove.children[-1]
         self.moveNumber += 1
+        # Signal View to add move highlight and remove highlights of next player
+        if self.currentPlayer == self.Red:
+            color = QColor('#66bf3b43')
+        elif self.currentPlayer == self.Blue:
+            color = QColor('#664185bf')
+        elif self.currentPlayer == self.Yellow:
+            color = QColor('#66c09526')
+        elif self.currentPlayer == self.Green:
+            color = QColor('#664e9161')
+        else:
+            color = QColor('#00000000')
+        self.addHighlight.emit(fromFile, fromRank, toFile, toRank, color)
         self.playerQueue.rotate(-1)
         self.setCurrentPlayer(self.playerQueue[0])
+        if self.currentPlayer == self.Red:
+            color = QColor('#66bf3b43')
+        elif self.currentPlayer == self.Blue:
+            color = QColor('#664185bf')
+        elif self.currentPlayer == self.Yellow:
+            color = QColor('#66c09526')
+        elif self.currentPlayer == self.Green:
+            color = QColor('#664e9161')
+        else:
+            color = QColor('#00000000')
+        self.removeHighlight.emit(color)
 
     def firstMove(self):
         while self.currentMove.name != 'root':
@@ -843,16 +941,20 @@ class Teams(Algorithm):
                 (toFile > 10 and toRank < 3) or (toFile > 10 and toRank > 10)):
             return False
 
-        # Check if target square is not occupied by friendly piece. (A player may not capture a friendly piece.)
+        # Check if target square is not occupied by friendly piece. (Castling move excluded.)
         toData = self.board.getData(toFile, toRank)
         if self.currentPlayer == self.Red and (toData[0] == 'r' or toData[0] == 'y'):
-            return False
+            if not (fromData == 'rK' and toData == 'rR'):
+                return False
         if self.currentPlayer == self.Blue and (toData[0] == 'b' or toData[0] == 'g'):
-            return False
+            if not (fromData == 'bK' and toData == 'bR'):
+                return False
         if self.currentPlayer == self.Yellow and (toData[0] == 'y' or toData[0] == 'r'):
-            return False
+            if not (fromData == 'yK' and toData == 'yR'):
+                return False
         if self.currentPlayer == self.Green and (toData[0] == 'g' or toData[0] == 'b'):
-            return False
+            if not (fromData == 'gK' and toData == 'gR'):
+                return False
 
         # TODO check if move is legal
 
@@ -873,11 +975,39 @@ class Teams(Algorithm):
                 if child.name == moveString:
                     self.currentMove = child
 
+        # Make the move
+        if fromData[1] == 'K' and toData != ' ':
+            if toData[1] == 'R':
+                # Castling move
+                if fromRank == toRank:
+                    if abs(toFile - fromFile) == 3:  # Kingside
+                        kingFile = toFile - 1 if toFile > fromFile else toFile + 1
+                        rookFile = fromFile + 1 if toFile > fromFile else fromFile - 1
+                        self.board.movePiece(fromFile, fromRank, kingFile, toRank)
+                        self.board.movePiece(toFile, fromRank, rookFile, toRank)
+                    elif abs(toFile - fromFile) == 4:  # Queenside
+                        kingFile = toFile + 2 if toFile < fromFile else toFile - 2
+                        rookFile = fromFile - 1 if toFile < fromFile else fromFile + 1
+                        self.board.movePiece(fromFile, fromRank, kingFile, toRank)
+                        self.board.movePiece(toFile, fromRank, rookFile, toRank)
+                elif fromFile == toFile:
+                    if abs(toRank - fromRank) == 3:  # Kingside
+                        kingRank = toRank - 1 if toRank > fromRank else toRank + 1
+                        rookRank = fromRank + 1 if toRank > fromRank else fromRank - 1
+                        self.board.movePiece(fromFile, fromRank, toFile, kingRank)
+                        self.board.movePiece(fromFile, toRank, toFile, rookRank)
+                    elif abs(toRank - fromRank) == 4:  # Queenside
+                        kingRank = toRank + 2 if toRank < fromRank else toRank - 2
+                        rookRank = fromRank - 1 if toRank < fromRank else fromRank + 1
+                        self.board.movePiece(fromFile, fromRank, toFile, kingRank)
+                        self.board.movePiece(fromFile, toRank, toFile, rookRank)
+            else:
+                return False
+        else:
+            self.board.movePiece(fromFile, fromRank, toFile, toRank)
+
         # Increment move number
         self.moveNumber += 1
-
-        # Make the move
-        self.board.movePiece(fromFile, fromRank, toFile, toRank)
 
         # Rotate player queue and get next player from the queue (first element)
         self.playerQueue.rotate(-1)
@@ -948,6 +1078,7 @@ class View(QWidget):
         if board:
             board.dataChanged.connect(self.update)
             board.boardReset.connect(self.update)
+            board.boardReset.connect(self.resetHighlights)
         self.updateGeometry()
 
     def setSquareSize(self, size):
@@ -1034,9 +1165,17 @@ class View(QWidget):
         self.update()
 
     def removeHighlight(self, highlight):
-        """Adds highlight to the list and redraws view."""
+        """Removes highlight from the list and redraws view."""
         self.highlights.remove(highlight)
         self.update()
+
+    def removeHighlightsOfColor(self, color):
+        """Removes all highlights of color."""
+        # NOTE: Need to loop through the reversed list, otherwise an element will be skipped if an element was removed
+        # in the previous iteration.
+        for highlight in reversed(self.highlights):
+            if highlight.color == color:
+                self.removeHighlight(highlight)
 
     def drawHighlights(self, painter):
         """Draws all recognized highlights stored in the list."""
