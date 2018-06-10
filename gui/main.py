@@ -651,7 +651,7 @@ class Algorithm(QObject):
         """Converts move string to algebraic notation."""
         # moveString = moveString[1:]
         moveString = moveString.split()
-        if moveString[0][0] == 'P':
+        if moveString[0][1] == 'P':
             moveString.pop(0)
             if len(moveString) == 3:
                 moveString[0] = moveString[0][0]
@@ -680,12 +680,13 @@ class Algorithm(QObject):
                     elif abs(toRank - fromRank) == 4:
                         moveString = 'O-O-O'
             else:
+                moveString[0] = moveString[0][1]
                 moveString[2] = 'x'
                 moveString.remove(moveString[1])
         else:
             moveString.remove(moveString[1])
-        if moveString != 'O-O' and moveString != 'O-O-O':
-            moveString[0] = moveString[0][1]
+            if moveString != 'O-O' and moveString != 'O-O-O':
+                moveString[0] = moveString[0][1]
         moveString = ''.join(moveString)
         return moveString
 
@@ -977,7 +978,7 @@ class Teams(Algorithm):
 
         # Make the move
         if fromData[1] == 'K' and toData != ' ':
-            if toData[1] == 'R':
+            if toData[1] == 'R' and fromData[0] == toData[0]:
                 # Castling move
                 if fromRank == toRank:
                     if abs(toFile - fromFile) == 3:  # Kingside
@@ -1002,7 +1003,7 @@ class Teams(Algorithm):
                         self.board.movePiece(fromFile, fromRank, toFile, kingRank)
                         self.board.movePiece(fromFile, toRank, toFile, rookRank)
             else:
-                return False
+                self.board.movePiece(fromFile, fromRank, toFile, toRank)
         else:
             self.board.movePiece(fromFile, fromRank, toFile, toRank)
 
