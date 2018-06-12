@@ -530,6 +530,8 @@ class Algorithm(QObject):
         self.currentPlayer = self.NoPlayer
         self.moveNumber = 0
         self.currentMove = self.Node('root', [], None)
+        # TODO store the root node
+        # self.moveTree = self.currentMove
         self.moves = []
         self.redName = self.NoPlayer
         self.blueName = self.NoPlayer
@@ -966,7 +968,6 @@ class Teams(Algorithm):
             move = self.Node(moveString, [], self.currentMove)
             self.currentMove.add(move)
             self.currentMove = move
-
             # Send signal to update the move list and pass the tree with moves in algebraic notation
             tree = self.treeToAlgebraic(self.currentMove.getRoot().getTree())
             self.moveTreeChanged.emit(tree)
@@ -1167,8 +1168,11 @@ class View(QWidget):
 
     def removeHighlight(self, highlight):
         """Removes highlight from the list and redraws view."""
-        self.highlights.remove(highlight)
-        self.update()
+        try:
+            self.highlights.remove(highlight)
+            self.update()
+        except ValueError:
+            pass
 
     def removeHighlightsOfColor(self, color):
         """Removes all highlights of color."""
