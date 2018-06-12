@@ -17,8 +17,8 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 -->
 
-![4PlayerChess](./resources/img/icon.svg)
-<img src="./resources/img/icon.svg" width="100" height="100">
+![4PlayerChess](resources/img/icon.svg?sanitize=true)
+<img src="resources/img/icon.svg?sanitize=true" width="100" height="100">
 
 # 4 Player Chess GUI
 A basic GUI for 4 Player Chess to analyze lines. This project is a work in progress. Currently, it only supports the Teams variant. Free-For-All (FFA) may be added in the future.
