@@ -18,7 +18,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 -->
 
 <!--![4PlayerChess](resources/img/icon.png)-->
-<img src="https://github.com/GammaDeltaII/4PlayerChess/blob/master/resources/img/icon.png" width="100" height="100">
+<img src="resources/img/icon.png" width="100" height="100">
 
 # 4 Player Chess GUI
 A basic GUI for 4 Player Chess to analyze lines. This project is a work in progress. Currently, it only supports the Teams variant. Free-For-All (FFA) may be added in the future.
