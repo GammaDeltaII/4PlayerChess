@@ -17,7 +17,6 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 -->
 
-<!--![4PlayerChess](resources/img/icon.png)-->
 <img src="resources/img/icon.png" width="100" height="100">
 
 # 4 Player Chess GUI
@@ -114,7 +113,7 @@ Open a terminal to enter the commands at the following steps.
 - On Windows, if Python version < 3.6, use `python` instead of `py`. To force latest version 3, use `py -3`, if needed.
 
 ## Contact
-If you have any questions or you would like to contribute to this project, please contact [GDII](https://www.chess.com/member/gdii).
+If you have any questions or you would like to contribute to this project, please contact [GDII](https://www.chess.com/member/gdii) (or on Discord: GammaDeltaII).
 
 ## Repository
 https://github.com/GammaDeltaII/4PlayerChess
