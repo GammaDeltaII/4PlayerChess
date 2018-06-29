@@ -177,21 +177,7 @@ background-color: rgb(255, 255, 255);</string>
        <string>FEN4</string>
       </property>
       <layout class="QGridLayout" name="gridLayout_4">
-       <item row="1" column="1">
-        <widget class="QPushButton" name="getFenButton">
-         <property name="statusTip">
-          <string>Generate FEN4 from current position</string>
-         </property>
-         <property name="styleSheet">
-          <string notr="true">background-color: rgb(180, 180, 180);
-color: rgb(0, 0, 0);</string>
-         </property>
-         <property name="text">
-          <string>Get</string>
-         </property>
-        </widget>
-       </item>
-       <item row="1" column="3">
+       <item row="1" column="2">
         <spacer name="horizontalSpacer_2">
          <property name="orientation">
           <enum>Qt::Horizontal</enum>
@@ -204,7 +190,7 @@ color: rgb(0, 0, 0);</string>
          </property>
         </spacer>
        </item>
-       <item row="1" column="2">
+       <item row="1" column="1">
         <widget class="QPushButton" name="setFenButton">
          <property name="statusTip">
           <string>Set position to current FEN4</string>
@@ -214,11 +200,11 @@ color: rgb(0, 0, 0);</string>
 color: rgb(0, 0, 0);</string>
          </property>
          <property name="text">
-          <string>Set</string>
+          <string>Set Position</string>
          </property>
         </widget>
        </item>
-       <item row="0" column="0" colspan="4">
+       <item row="0" column="0" colspan="3">
         <widget class="QPlainTextEdit" name="fenField">
          <property name="sizePolicy">
           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
@@ -365,7 +351,7 @@ color: rgb(0, 0, 0);</string>
         <string>PGN4</string>
        </attribute>
        <layout class="QGridLayout" name="gridLayout_3">
-        <item row="1" column="4">
+        <item row="1" column="3">
          <spacer name="horizontalSpacer">
           <property name="orientation">
            <enum>Qt::Horizontal</enum>
@@ -378,27 +364,14 @@ color: rgb(0, 0, 0);</string>
           </property>
          </spacer>
         </item>
-        <item row="0" column="0" colspan="5">
+        <item row="0" column="0" colspan="4">
          <widget class="QPlainTextEdit" name="pgnField">
           <property name="styleSheet">
            <string notr="true">background-color: rgb(255, 255, 255);</string>
           </property>
          </widget>
         </item>
-        <item row="1" column="1">
-         <widget class="QPushButton" name="getPgnButton">
-          <property name="statusTip">
-           <string>Generate PGN4 for current game</string>
-          </property>
-          <property name="styleSheet">
-           <string notr="true">background-color: rgb(180, 180, 180);</string>
-          </property>
-          <property name="text">
-           <string>Get</string>
-          </property>
-         </widget>
-        </item>
-        <item row="1" column="3">
+        <item row="1" column="2">
          <widget class="QPushButton" name="savePgnButton">
           <property name="enabled">
            <bool>true</bool>
@@ -414,7 +387,7 @@ color: rgb(0, 0, 0);</string>
           </property>
          </widget>
         </item>
-        <item row="1" column="2">
+        <item row="1" column="1">
          <widget class="QPushButton" name="loadPgnButton">
           <property name="statusTip">
            <string>Set game to current PGN4</string>

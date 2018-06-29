@@ -56,6 +56,8 @@ class MainWindow(QMainWindow, Ui_mainWindow):
         self.algorithm.boardChanged.connect(self.view.setBoard)  # If algorithm changes board, view must update board
         self.algorithm.currentPlayerChanged.connect(self.view.highlightPlayer)
         self.algorithm.moveTextChanged.connect(self.updateMoveList)
+        self.algorithm.selectMove.connect(self.selectMove)
+        self.algorithm.removeMoveSelection.connect(self.removeMoveSelection)
         self.algorithm.fen4Generated.connect(self.fenField.setPlainText)
         self.algorithm.pgn4Generated.connect(self.pgnField.setPlainText)
         self.algorithm.removeHighlight.connect(self.view.removeHighlightsOfColor)
@@ -79,12 +81,8 @@ class MainWindow(QMainWindow, Ui_mainWindow):
         self.boardResetButton.clicked.connect(self.algorithm.newGame)
         self.boardResetButton.clicked.connect(self.view.repaint)  # Forced repaint
         self.boardResetButton.clicked.connect(self.moveListWidget.clear)
-        self.getFenButton.clicked.connect(self.algorithm.getBoardState)
-        self.getFenButton.clicked.connect(self.fenField.repaint)
         self.setFenButton.clicked.connect(self.setFen4)
-        self.getPgnButton.clicked.connect(self.algorithm.getPgn4)
         self.loadPgnButton.clicked.connect(self.openFileNameDialog)
-        self.savePgnButton.clicked.connect(self.algorithm.getPgn4)
         self.savePgnButton.clicked.connect(self.saveFileDialog)
         self.prevMoveButton.clicked.connect(self.algorithm.prevMove)
         self.prevMoveButton.clicked.connect(self.view.repaint)
@@ -185,7 +183,10 @@ class MainWindow(QMainWindow, Ui_mainWindow):
         fileName, _ = QFileDialog.getSaveFileName(self, "Save Game", "data/games/",
                                                   "PGN4 Files (*.pgn4)", options=options)
         if fileName:
-            with open(fileName + '.pgn4', 'w') as file:
+            ext = '.pgn4'
+            if ext not in fileName:
+                fileName += ext
+            with open(fileName, 'w') as file:
                 pgn4 = self.pgnField.toPlainText()
                 file.writelines(pgn4)
 
@@ -217,9 +218,9 @@ class MainWindow(QMainWindow, Ui_mainWindow):
                 """Overrides sizeHint() method."""
                 rowWidth = sum(self.item(index).sizeHint().width() for index in range(self.count()))
                 fm = QFontMetrics(QFont('Arial', 12, QFont.Bold))
-                width = 290
                 padding = 2  # Row padding
-                height = (fm.height() + 2 * padding) * (rowWidth // width + 1)
+                width = 290
+                height = fm.height() * (rowWidth // width + 1) + 2 * padding
                 return QSize(width, height)
 
         # Custom QListWidgetItem class for row items in move list rows
@@ -231,7 +232,7 @@ class MainWindow(QMainWindow, Ui_mainWindow):
             def sizeHint(self):
                 """Overrides sizeHint() method."""
                 fm = QFontMetrics(QFont('Arial', 12, QFont.Bold))
-                spacing = 9  # TODO get rid of the item spacing somehow
+                spacing = 10  # TODO get rid of the item spacing somehow
                 width = fm.width(self.text()) + 2 * spacing
                 height = fm.height()
                 return QSize(width, height)
@@ -247,23 +248,24 @@ class MainWindow(QMainWindow, Ui_mainWindow):
             if token == '(':
                 # Start of new variation
                 level += 1
-                listItem = QListWidgetItem(self.moveListWidget)
-                listItem.setSizeHint(row.sizeHint())
-                self.moveListWidget.addItem(listItem)
-                self.moveListWidget.setItemWidget(listItem, row)
+                if not row.count() == 0:
+                    listItem = QListWidgetItem(self.moveListWidget)
+                    listItem.setSizeHint(row.sizeHint())
+                    self.moveListWidget.addItem(listItem)
+                    self.moveListWidget.setItemWidget(listItem, row)
                 row = Row()
                 row.itemClicked.connect(lambda item, this=row: self.moveListItemClicked(item, this))
                 if level == 1:
                     row.setStyleSheet("""
                     QListWidget {color: rgb(100, 100, 100); font-weight: bold; font-size: 12; 
                     background-color: rgb(240, 240, 240); padding: 2px; margin: 0px;}
-                    QListWidget::item:selected {background-color:  rgba(255, 255, 0, 0.3);}
+                    QListWidget::item:selected {color: rgb(100, 100, 100); background-color: rgba(255, 255, 0, 0.3);}
                     """)
                 elif level > 1:
                     row.setStyleSheet("""
                     QListWidget {color: rgb(150, 150, 150); font-weight: bold; font-size: 12; 
                     background-color: rgb(240, 240, 240); padding: 2px; margin: 0px;}
-                    QListWidget::item:selected {background-color:  rgba(255, 255, 0, 0.3);}
+                    QListWidget::item:selected {color: rgb(150, 150, 150); background-color: rgba(255, 255, 0, 0.3);}
                     """)
                 else:
                     # Do nothing. Main line uses default stylesheet
@@ -283,13 +285,13 @@ class MainWindow(QMainWindow, Ui_mainWindow):
                     row.setStyleSheet("""
                     QListWidget {color: rgb(100, 100, 100); font-weight: bold; font-size: 12; 
                     background-color: rgb(240, 240, 240); padding: 2px; margin: 0px;}
-                    QListWidget::item:selected {background-color:  rgba(255, 255, 0, 0.3);}
+                    QListWidget::item:selected {color: rgb(100, 100, 100); background-color: rgba(255, 255, 0, 0.3);}
                     """)
                 elif level > 1:
                     row.setStyleSheet("""
                     QListWidget {color: rgb(150, 150, 150); font-weight: bold; font-size: 12; 
                     background-color: rgb(240, 240, 240); padding: 2px; margin: 0px;}
-                    QListWidget::item:selected {background-color:  rgba(255, 255, 0, 0.3);}
+                    QListWidget::item:selected {color: rgb(150, 150, 150); background-color: rgba(255, 255, 0, 0.3);}
                     """)
                 else:
                     # Do nothing. Main line uses default stylesheet
@@ -303,12 +305,59 @@ class MainWindow(QMainWindow, Ui_mainWindow):
 
     def moveListItemClicked(self, clickedItem, clickedRow):
         """Handles move list click event to set game state to clicked move."""
+        # If clicked item is not a move, remove selection
+        char = clickedItem.text()[0]
+        if char.isdigit() or char == '(' or char == ')' or char == '.':
+            clickedItem.setSelected(False)
+        else:
+            # Remove previous selection from other row, if any
+            moveIndex = None
+            count = 0
+            for index in range(self.moveListWidget.count()):
+                row = self.moveListWidget.itemWidget(self.moveListWidget.item(index))
+                if row != clickedRow:
+                    count += row.count()
+                    if row.selectedItems():
+                        for item in row.selectedItems():
+                            item.setSelected(False)
+                elif row == clickedRow:
+                    count += row.row(clickedItem)
+                    moveIndex = count
 
-        # TODO find clicked move in move tree and set game state accordingly
+            # Get node from dictionary and do actions to get to node from root
+            key = (moveIndex, clickedItem.text())
+            clickedNode = self.algorithm.moveDict[key]
+            if clickedNode:
+                actions = clickedNode.pathFromRoot()
+                self.algorithm.firstMove()
+                for action in actions:
+                    exec('self.algorithm.' + action)
 
-        # Remove previous selection from other row, if any
+    def selectMove(self, key):
+        """Makes current move selected in the move list."""
+        moveIndex = key[0]
+        index = 0
+        notFound = True
+        while notFound:
+            row = self.moveListWidget.itemWidget(self.moveListWidget.item(index))
+            rowLength = row.count()
+            if moveIndex > rowLength - 1:
+                moveIndex -= rowLength
+                index += 1
+            else:
+                row.item(moveIndex).setSelected(True)
+                notFound = False
+        # Remove selection from other rows
+        for rowIndex in range(self.moveListWidget.count()):
+            row = self.moveListWidget.itemWidget(self.moveListWidget.item(rowIndex))
+            if rowIndex != index and row.selectedItems:
+                for item in row.selectedItems():
+                    item.setSelected(False)
+
+    def removeMoveSelection(self):
+        """Removes move selection in move list."""
         for index in range(self.moveListWidget.count()):
             row = self.moveListWidget.itemWidget(self.moveListWidget.item(index))
-            if row != clickedRow and row.selectedItems():
+            if row.selectedItems:
                 for item in row.selectedItems():
                     item.setSelected(False)

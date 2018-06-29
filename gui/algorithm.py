@@ -33,6 +33,8 @@ class Algorithm(QObject):
     fen4Generated = pyqtSignal(str)
     pgn4Generated = pyqtSignal(str)
     moveTextChanged = pyqtSignal(str)
+    selectMove = pyqtSignal(tuple)
+    removeMoveSelection = pyqtSignal()
     removeHighlight = pyqtSignal(QColor)
     addHighlight = pyqtSignal(int, int, int, int, QColor)
     playerNamesChanged = pyqtSignal(str, str, str, str)
@@ -40,6 +42,11 @@ class Algorithm(QObject):
     NoResult, Team1Wins, Team2Wins, Draw = ['*', '1-0', '0-1', '1/2-1/2']  # Results
     NoPlayer, Red, Blue, Yellow, Green = ['?', 'r', 'b', 'y', 'g']  # Players
     playerQueue = deque([Red, Blue, Yellow, Green])
+
+    startPosition = '3yRyNyByKyQyByNyR3/3yPyPyPyPyPyPyPyP3/14/bRbP10gPgR/bNbP10gPgN/bBbP10gPgB/bKbP10gPgQ/' \
+                    'bQbP10gPgK/bBbP10gPgB/bNbP10gPgN/bRbP10gPgR/14/3rPrPrPrPrPrPrPrP3/3rRrNrBrQrKrBrNrR3 ' \
+                    'r - - 0 1'
+    # Castling rights: rKrQbKbQyKyQgKgQ (not implemented yet)
 
     def __init__(self):
         super().__init__()
@@ -49,11 +56,16 @@ class Algorithm(QObject):
         self.currentPlayer = self.NoPlayer
         self.moveNumber = 0
         self.currentMove = self.Node('root', [], None)
+        self.currentMove.fen4 = self.startPosition
         self.redName = self.NoPlayer
         self.blueName = self.NoPlayer
         self.yellowName = self.NoPlayer
         self.greenName = self.NoPlayer
         self.moveText = ''
+        self.moveDict = dict()
+        self.inverseMoveDict = dict()
+        self.index = 0  # Used by getMoveText() method
+        self.fenMoveNumber = 1
 
     class Node:
         """Generic node class. Basic element of a tree."""
@@ -61,6 +73,7 @@ class Algorithm(QObject):
             self.name = name
             self.children = children
             self.parent = parent
+            self.fen4 = None
 
         def add(self, node):
             """Adds node to children."""
@@ -76,17 +89,23 @@ class Algorithm(QObject):
                 return self
             return self.parent.getRoot()
 
+        def pathFromRoot(self, actions=None):
+            if not actions:
+                actions = []
+            if self.parent is None:
+                return actions
+            else:
+                var = self.parent.children.index(self)
+                actions.insert(0, 'nextMove(' + str(var) + ')')
+            return self.parent.pathFromRoot(actions)
+
     def updatePlayerNames(self, red, blue, yellow, green):
         """Sets player names to names entered in the player name labels."""
         self.redName = red if not (red == 'Player Name' or red == '') else '?'
         self.blueName = blue if not (blue == 'Player Name' or blue == '') else '?'
         self.yellowName = yellow if not (yellow == 'Player Name' or yellow == '') else '?'
         self.greenName = green if not (green == 'Player Name' or green == '') else '?'
-
-    def resetMoves(self):
-        """Resets current move to root and move number to zero."""
-        self.moveNumber = 0
-        self.currentMove = self.Node('root', [], None)
+        self.getPgn4()  # Update PGN4
 
     def setResult(self, value):
         """Updates game result, if changed."""
@@ -97,6 +116,7 @@ class Algorithm(QObject):
             self.gameOver.emit(self.result)
         else:
             self.result = value
+        self.getPgn4()  # Update PGN4
 
     def setCurrentPlayer(self, value):
         """Updates current player, if changed."""
@@ -124,17 +144,12 @@ class Algorithm(QObject):
 
     def newGame(self):
         """Initializes board and sets starting position."""
-        self.setupBoard()
-        # Set starting position from FEN4
-        self.board.parseFen4('3yRyNyByKyQyByNyR3/3yPyPyPyPyPyPyPyP3/14/bRbP10gPgR/bNbP10gPgN/bBbP10gPgB/bKbP10gPgQ/'
-                             'bQbP10gPgK/bBbP10gPgB/bNbP10gPgN/bRbP10gPgR/14/3rPrPrPrPrPrPrPrP3/3rRrNrBrQrKrBrNrR3 '
-                             'r rKrQbKbQyKyQgKgQ - 0 1')
-        self.setResult(self.NoResult)
-        self.setCurrentPlayer(self.Red)
-        self.setPlayerQueue(self.currentPlayer)
-        self.resetMoves()
+        fen4 = self.startPosition
+        self.setBoardState(fen4)
+        self.fen4Generated.emit(fen4)
+        self.currentPlayerChanged.emit(self.Red)
 
-    def getBoardState(self):
+    def getFen4(self, emitSignal=True):
         """Gets FEN4 from current board state."""
         fen4 = self.board.getFen4()
         # Append character for current player
@@ -143,16 +158,28 @@ class Algorithm(QObject):
         fen4 += '- '  # "K" if kingside castling available, "Q" if queenside, "-" if no player can castle
         fen4 += '- '  # En passant target square
         fen4 += str(self.moveNumber) + ' '  # Number of quarter-moves
-        fen4 += str(self.moveNumber // 4 + 1) + ' '  # Number of full moves, starting from 1
-        self.fen4Generated.emit(fen4)
+        fen4 += str(self.moveNumber // 4 + 1)  # Number of full moves, starting from 1
+        if emitSignal:
+            self.fen4Generated.emit(fen4)
         return fen4
 
     def setBoardState(self, fen4):
         """Sets board according to FEN4."""
         if not fen4:
             return
+        if self.getFen4(False) == fen4:  # Do not emit fen4Generated signal
+            return
+        self.setupBoard()
         self.board.parseFen4(fen4)
+        self.setResult(self.NoResult)
         self.setCurrentPlayer(fen4.split(' ')[1])
+        self.moveNumber = int(fen4.split(' ')[-2])
+        self.fenMoveNumber = int(fen4.split(' ')[-2]) + 1
+        self.currentMove = self.Node('root', [], None)
+        self.currentMove.fen4 = fen4
+        self.moveText = ''
+        self.moveDict.clear()
+        self.getPgn4()  # Update PGN4
 
     def toAlgebraic(self, moveString):
         """Converts move string to algebraic notation."""
@@ -263,12 +290,19 @@ class Algorithm(QObject):
         else:
             color = QColor('#00000000')
         self.removeHighlight.emit(color)
+        if not self.currentMove.name == 'root':
+            key = self.inverseMoveDict[self.currentMove]
+            self.selectMove.emit(key)
+        else:
+            self.removeMoveSelection.emit()
+        self.getFen4()  # Update FEN4
+        self.getPgn4()  # Update PGN4
 
-    def nextMove(self):
-        """Sets board state to next move."""
+    def nextMove(self, var=0):
+        """Sets board state to next move. Follows main variation by default (var=0)."""
         if not self.currentMove.children:
             return
-        moveString = self.currentMove.children[0].name  # Take first variation
+        moveString = self.currentMove.children[var].name
         moveString = moveString.split()
         piece = moveString[0]
         fromFile = ord(moveString[1][0]) - 97  # chr(97) = 'a'
@@ -281,7 +315,7 @@ class Algorithm(QObject):
             toRank = int(moveString[2][1:]) - 1
         self.board.setData(fromFile, fromRank, ' ')
         self.board.setData(toFile, toRank, piece)
-        self.currentMove = self.currentMove.children[0]  # First variation
+        self.currentMove = self.currentMove.children[var]
         self.moveNumber += 1
         # Signal View to add move highlight and remove highlights of next player
         if self.currentPlayer == self.Red:
@@ -308,6 +342,10 @@ class Algorithm(QObject):
         else:
             color = QColor('#00000000')
         self.removeHighlight.emit(color)
+        key = self.inverseMoveDict[self.currentMove]
+        self.selectMove.emit(key)
+        self.getFen4()  # Update FEN4
+        self.getPgn4()  # Update PGN4
 
     def firstMove(self):
         """Sets board state to first move."""
@@ -346,7 +384,7 @@ class Algorithm(QObject):
         pgn4 += '[PlyCount "' + str(self.moveNumber) + '"]\n'  # Total number of quarter-moves
         pgn4 += '[TimeControl "60 d15"]\n'  # 60 seconds sudden death with 15 seconds delay per move
         pgn4 += '[Mode "ICS"]\n'  # ICS = Internet Chess Server, OTB = Over-The-Board
-        pgn4 += '[CurrentPosition "' + self.getBoardState() + '"]\n'
+        pgn4 += '[CurrentPosition "' + self.getFen4() + '"]\n'
         pgn4 += '\n'
 
         # Movetext
@@ -358,7 +396,8 @@ class Algorithm(QObject):
         self.pgn4Generated.emit(pgn4)
 
     def getMoveText(self, node, move=1, var=0):
-        """Traverses move tree to generate movetext."""
+        """Traverses move tree to generate movetext and updates move dictionary to keep track of the nodes associated
+        with the movetext."""
         if node.children:
             main = node.children[0]
             if len(node.children) > 1:
@@ -368,29 +407,80 @@ class Algorithm(QObject):
         else:
             main = None
             variations = None
+        # If different FEN4 starting position used, insert move number if needed
+        if node.name == 'root' and move != 1 and (move - 1) % 4:
+            token = str((move - 1) // 4 + 1) + '.'
+            self.moveText += token + ' '
+            self.moveDict[(self.index, token)] = None
+            self.index += 1
+            token = '.' * ((move - 1) % 4)
+            if token:
+                self.moveText += token
+                self.moveDict[(self.index, token)] = None
+                self.index += 1
+            if (move - 1) % 4:
+                self.moveText += ' '
+        # Main move has variations
         if main and variations:
             if not (move - 1) % 4:
-                self.moveText += str(move // 4 + 1) + '. '
-            self.moveText += self.toAlgebraic(main.name) + ' '
+                token = str(move // 4 + 1) + '.'
+                self.moveText += token + ' '
+                self.moveDict[(self.index, token)] = None
+                self.index += 1
+            # Add main move to movetext before expanding variations, but do not expand main move yet
+            token = self.toAlgebraic(main.name)
+            self.moveText += token + ' '
+            self.moveDict[(self.index, token)] = main
+            self.index += 1
+            # Expand variations
             for variation in variations:
-                self.moveText += '( '
-                self.moveText += str(move // 4 + 1) + '. ' + '.' * ((move - 1) % 4)
+                if self.moveText[-2] == ')':
+                    self.index += 1
+                token = '('
+                self.moveText += token + ' '
+                self.moveDict[(self.index, token)] = None
+                self.index += 1
+                token = str(move // 4 + 1) + '.'
+                self.moveText += token + ' '
+                self.moveDict[(self.index, token)] = None
+                self.index += 1
+                token = '.' * ((move - 1) % 4)
+                if token:
+                    self.moveText += token
+                    self.moveDict[(self.index, token)] = None
+                    self.index += 1
                 if (move - 1) % 4:
                     self.moveText += ' '
-                self.moveText += self.toAlgebraic(variation.name) + ' '
+                token = self.toAlgebraic(variation.name)
+                self.moveText += token + ' '
+                self.moveDict[(self.index, token)] = variation
+                self.index += 1
                 self.getMoveText(variation, move + 1, var + 1)
+            # Expand main move
+            self.index += 1
             self.getMoveText(main, move + 1, var)
+        # Main move has no variations
         elif main and not variations:
             if not (move - 1) % 4:
-                self.moveText += str(move // 4 + 1) + '. '
-            self.moveText += self.toAlgebraic(main.name) + ' '
+                token = str(move // 4 + 1) + '.'
+                self.moveText += token + ' '
+                self.moveDict[(self.index, token)] = None
+                self.index += 1
+            token = self.toAlgebraic(main.name)
+            self.moveText += token + ' '
+            self.moveDict[(self.index, token)] = main
+            self.index += 1
             self.getMoveText(main, move + 1, var)
+        # Node is leaf node (i.e. end of variation or main line)
         else:
             if var != 0:
-                self.moveText += ') '
+                token = ')'
+                self.moveText += token + ' '
+                self.moveDict[(self.index, token)] = None
 
     def parsePgn4(self, pgn4):
         """Parses PGN4 and sets game state accordingly."""
+        currentPosition = None
         lines = pgn4.split('\n')
         for line in lines:
             if line == '':
@@ -409,8 +499,7 @@ class Algorithm(QObject):
                 elif tag[0] == 'Result':
                     self.result = tag[1]
                 elif tag[0] == 'CurrentPosition':
-                    # TODO set current position
-                    pass
+                    currentPosition = tag[1]
                 else:
                     # Irrelevant tags
                     pass
@@ -421,6 +510,9 @@ class Algorithm(QObject):
                 line = line.replace(' 1-0', '')
                 line = line.replace(' 0-1', '')
                 line = line.replace(' 1/2-1/2', '')
+                if line == '*':
+                    # No movetext to process
+                    break
                 roots = []
                 tokens = line.split()
                 prev = None
@@ -452,7 +544,29 @@ class Algorithm(QObject):
                         self.makeMove(fromFile, fromRank, toFile, toRank)
                     prev = token
                     i += 1
+        # Set game position to FEN4
+        self.firstMove()
+        node = None
+        for node in self.traverse(self.currentMove, self.currentMove.children):
+            if node.fen4 == currentPosition:
+                break
+        if node:
+            actions = node.pathFromRoot()
+            for action in actions:
+                exec('self.' + action)
+        # Emit signal to update player names
         self.playerNamesChanged.emit(self.redName, self.blueName, self.yellowName, self.greenName)
+
+    def traverse(self, tree, children):
+        """Traverses nodes of tree in breadth-first order."""
+        yield tree
+        last = tree
+        for node in self.traverse(tree, children):
+            for child in node.children:
+                yield child
+                last = child
+            if last == node:
+                return
 
 
 class Teams(Algorithm):
@@ -510,10 +624,15 @@ class Teams(Algorithm):
             self.currentMove.add(move)
             self.currentMove = move
 
-            # Update movetext
+            # Update movetext and move dictionary
             self.moveText = ''
-            self.getMoveText(self.currentMove.getRoot())
+            self.moveDict.clear()
+            self.index = 0
+            self.getMoveText(self.currentMove.getRoot(), self.fenMoveNumber)
+            self.inverseMoveDict = {value: key for key, value in self.moveDict.items()}
+            key = self.inverseMoveDict[self.currentMove]
             self.moveTextChanged.emit(self.moveText)
+            self.selectMove.emit(key)
         else:
             # Move already exists. Update current move, but do not change the move tree
             for child in self.currentMove.children:
@@ -557,6 +676,13 @@ class Teams(Algorithm):
         # Rotate player queue and get next player from the queue (first element)
         self.playerQueue.rotate(-1)
         self.setCurrentPlayer(self.playerQueue[0])
+
+        # Update FEN4 and PGN4
+        fen4 = self.getFen4()
+        self.getPgn4()
+
+        # Store FEN4 in current node
+        self.currentMove.fen4 = fen4
 
         return True
 
