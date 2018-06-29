@@ -233,7 +233,7 @@ class Ui_mainWindow(object):
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.moveListTab), _translate("mainWindow", "Move List"))
         self.savePgnButton.setStatusTip(_translate("mainWindow", "Save game to PGN4 file"))
         self.savePgnButton.setText(_translate("mainWindow", "Save"))
-        self.loadPgnButton.setStatusTip(_translate("mainWindow", "Set game to current PGN4"))
+        self.loadPgnButton.setStatusTip(_translate("mainWindow", "Load game from PGN4 file"))
         self.loadPgnButton.setText(_translate("mainWindow", "Load"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.pgnTab), _translate("mainWindow", "PGN4"))
         self.menuFile.setTitle(_translate("mainWindow", "File"))

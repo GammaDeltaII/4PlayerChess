@@ -390,7 +390,7 @@ color: rgb(0, 0, 0);</string>
         <item row="1" column="1">
          <widget class="QPushButton" name="loadPgnButton">
           <property name="statusTip">
-           <string>Set game to current PGN4</string>
+           <string>Load game from PGN4 file</string>
           </property>
           <property name="styleSheet">
            <string notr="true">background-color: rgb(180, 180, 180);</string>
