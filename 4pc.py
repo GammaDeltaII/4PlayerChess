@@ -21,6 +21,7 @@
 import sys
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtGui import QIcon
+from PyQt5.QtCore import QRect
 from gui.main import MainWindow
 
 
@@ -29,6 +30,10 @@ def main():
     app = QApplication(sys.argv)
     app.setWindowIcon(QIcon('resources/img/icon.svg'))
     window = MainWindow()
+    screen = QRect(app.desktop().availableGeometry())
+    x = screen.left() + (screen.width() - window.width()) / 2
+    y = screen.top() + (screen.height() - window.height()) / 2
+    window.move(x, y)
     window.show()
     sys.exit(app.exec_())
 

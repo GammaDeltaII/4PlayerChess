@@ -94,7 +94,7 @@ class View(QWidget):
         self.updateGeometry()
 
     def sizeHint(self):
-        """Overrides QWidget sizeHint() method. Computes and returns size based on size of board squares."""
+        """Implements sizeHint() method. Computes and returns size based on size of board squares."""
         return QSize(self.squareSize.width()*self.board.files, self.squareSize.height()*self.board.ranks)
 
     def squareRect(self, file, rank):
@@ -103,7 +103,7 @@ class View(QWidget):
         return QRect(QPoint(file*sqSize.width(), (self.board.ranks-(rank+1))*sqSize.height()), sqSize)
 
     def paintEvent(self, event):
-        """Overrides QWidget paintEvent() method. Draws squares and pieces on the board."""
+        """Implements paintEvent() method. Draws squares and pieces on the board."""
         painter = QPainter()
         painter.begin(self)
         # First draw squares, then highlights, then pieces
@@ -165,7 +165,7 @@ class View(QWidget):
         return QPoint(file, self.board.ranks - rank)
 
     def mouseReleaseEvent(self, event):
-        """Overrides QWidget mouseReleaseEvent() method. Emits signal with clicked square of type QPoint as value."""
+        """Implements mouseReleaseEvent() method. Emits signal with clicked square of type QPoint as value."""
         point = self.squareAt(event.pos())
         if point.isNull():
             return

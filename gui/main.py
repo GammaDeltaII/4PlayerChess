@@ -19,9 +19,9 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from PyQt5.QtWidgets import QMainWindow, QSizePolicy, QLayout, QListWidget, QListWidgetItem, QListView, QFrame, \
-    QFileDialog
-from PyQt5.QtCore import Qt, QSize, QPoint
-from PyQt5.QtGui import QIcon, QColor, QFont, QFontMetrics
+    QFileDialog, QWidget, QLabel
+from PyQt5.QtCore import Qt, QSize, QPoint, QRect
+from PyQt5.QtGui import QIcon, QColor, QFont, QFontMetrics, QPainter
 from ui.mainwindow import Ui_mainWindow
 from gui.algorithm import Teams
 from gui.view import View
@@ -32,6 +32,9 @@ class MainWindow(QMainWindow, Ui_mainWindow):
     def __init__(self):
         super().__init__()
         self.setupUi(self)
+
+        # Show license notice
+        self.statusbar.showMessage('Copyright (C) 2018, GammaDeltaII (GNU GPL-3.0)', 5000)
 
         # Create view and algorithm instances
         self.view = View()
@@ -66,16 +69,19 @@ class MainWindow(QMainWindow, Ui_mainWindow):
         self.algorithm.addHighlight.connect(self.addHighlight)
 
         # Connect menu actions
+        self.actionAbout.triggered.connect(self.showAboutWindow)
         self.actionQuit.triggered.connect(self.close)
         self.actionNew_Game.triggered.connect(self.algorithm.newGame)
         self.actionNew_Game.triggered.connect(self.view.repaint)  # Forced repaint
         self.actionNew_Game.triggered.connect(self.moveListWidget.clear)
+        self.actionLoad_Game.triggered.connect(self.openFileNameDialog)
+        self.actionSave_Game_As.triggered.connect(self.saveFileDialog)
         self.actionCopy_FEN4.triggered.connect(self.fenField.selectAll)
         self.actionCopy_FEN4.triggered.connect(self.fenField.copy)
+        self.actionCopy_FEN4.triggered.connect(self.repaint)
         self.actionPaste_FEN4.triggered.connect(self.fenField.clear)
         self.actionPaste_FEN4.triggered.connect(self.fenField.paste)
-        self.actionSave_Game_As.triggered.connect(self.saveFileDialog)
-        self.actionLoad_Game.triggered.connect(self.openFileNameDialog)
+        self.actionPaste_FEN4.triggered.connect(self.repaint)
 
         # Connect button actions
         self.boardResetButton.clicked.connect(self.algorithm.newGame)
@@ -100,6 +106,62 @@ class MainWindow(QMainWindow, Ui_mainWindow):
         self.clickPoint = QPoint()
         self.selectedSquare = 0
         self.moveHighlight = 0
+
+        # Create application info popup
+        self.popup = None
+
+    class Popup(QWidget):
+        """Pop-up window with application info."""
+        def __init__(self):
+            super().__init__()
+            self.setFixedSize(300, 220)
+            self.setStyleSheet("""
+            color: white;
+            background-color: rgb(50, 50, 50);
+            """)
+
+            self.text = QLabel(self)
+            self.text.setFixedSize(250, 120)
+            self.text.setWordWrap(True)
+            self.text.setOpenExternalLinks(True)
+            self.text.setText("""
+            <center>
+            <p><b>4PlayerChess</b></p>
+            <small>
+            <p>Version 0.1</p>
+            <p>Copyright &copy; 2018, GammaDeltaII</p>
+            <p>This software is licensed under the GNU General Public License v3.0<br>
+            <a href = "https://www.gnu.org/licenses/gpl-3.0" style = "color:grey;">
+            https://www.gnu.org/licenses/gpl-3.0</a></p>
+            </small>
+            </center>
+            """)
+            x = (self.width() - self.text.width()) / 2
+            y = 20 + 50 + 10
+            self.text.move(x, y)
+            self.text.show()
+
+        def paintEvent(self, event):
+            """Implements paintEvent() method."""
+            painter = QPainter()
+            painter.begin(self)
+            icon = QIcon('resources/img/icon.svg')
+            width = 50
+            height = 50
+            x = (self.width() - width) / 2
+            y = 20
+            rect = QRect(x, y, width, height)
+            icon.paint(painter, rect, Qt.AlignCenter)
+            painter.end()
+
+    def showAboutWindow(self):
+        """Show pop-up window with application info."""
+        self.popup = self.Popup()
+        x = self.x() + (self.width() - self.popup.width()) / 2
+        y = self.y() + (self.height() - self.popup.height()) / 2
+        self.popup.move(x, y)
+        self.popup.show()
+        self.repaint()
 
     def addHighlight(self, fromFile, fromRank, toFile, toRank, color):
         """Adds move highlight to board view."""
@@ -174,6 +236,7 @@ class MainWindow(QMainWindow, Ui_mainWindow):
                 pgn4 = ''.join(file.readlines())
                 self.pgnField.setPlainText(pgn4)
                 self.algorithm.parsePgn4(pgn4)
+                self.statusbar.showMessage('Game loaded.', 3000)
 
     def saveFileDialog(self):
         """Shows file dialog to save a game to a PGN4 file."""
@@ -189,6 +252,7 @@ class MainWindow(QMainWindow, Ui_mainWindow):
             with open(fileName, 'w') as file:
                 pgn4 = self.pgnField.toPlainText()
                 file.writelines(pgn4)
+                self.statusbar.showMessage('Game saved.', 3000)
 
     def setFen4(self):
         """Gets FEN4 from the text field to set the board accordingly."""
@@ -198,8 +262,8 @@ class MainWindow(QMainWindow, Ui_mainWindow):
 
     def updateMoveList(self, moveText):
         """Updates move list based on movetext."""
-        # Custom QListWidget class for rows in move list
         class Row(QListWidget):
+            """Custom QListWidget class for rows in move list."""
             def __init__(self):
                 super().__init__()
                 self.setFlow(QListView.LeftToRight)
@@ -215,7 +279,7 @@ class MainWindow(QMainWindow, Ui_mainWindow):
                 """)
 
             def sizeHint(self):
-                """Overrides sizeHint() method."""
+                """Implements sizeHint() method."""
                 rowWidth = sum(self.item(index).sizeHint().width() for index in range(self.count()))
                 fm = QFontMetrics(QFont('Arial', 12, QFont.Bold))
                 padding = 2  # Row padding
@@ -223,14 +287,14 @@ class MainWindow(QMainWindow, Ui_mainWindow):
                 height = fm.height() * (rowWidth // width + 1) + 2 * padding
                 return QSize(width, height)
 
-        # Custom QListWidgetItem class for row items in move list rows
         class RowItem(QListWidgetItem):
+            """Custom QListWidgetItem class for row items in move list rows."""
             def __init__(self, text):
                 super().__init__(text)
                 self.setTextAlignment(Qt.AlignCenter)
 
             def sizeHint(self):
-                """Overrides sizeHint() method."""
+                """Implements sizeHint() method."""
                 fm = QFontMetrics(QFont('Arial', 12, QFont.Bold))
                 spacing = 10  # TODO get rid of the item spacing somehow
                 width = fm.width(self.text()) + 2 * spacing
@@ -358,6 +422,6 @@ class MainWindow(QMainWindow, Ui_mainWindow):
         """Removes move selection in move list."""
         for index in range(self.moveListWidget.count()):
             row = self.moveListWidget.itemWidget(self.moveListWidget.item(index))
-            if row.selectedItems:
+            if row.selectedItems():
                 for item in row.selectedItems():
                     item.setSelected(False)

@@ -358,7 +358,7 @@ class Algorithm(QObject):
             self.nextMove()
 
     def makeMove(self, fromFile, fromRank, toFile, toRank):
-        """This method must be overridden to define the proper logic corresponding to the game type (Teams or FFA)."""
+        """This method must be implemented to define the proper logic corresponding to the game type (Teams or FFA)."""
         return False
 
     def getPgn4(self):
