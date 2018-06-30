@@ -112,8 +112,9 @@ Open a terminal to enter the commands at the following steps.
     - `py -v` (Windows)
 - On Windows, if Python version < 3.6, use `python` instead of `py`. To force latest version 3, use `py -3`, if needed.
 
-## Contact
-If you have any questions or you would like to contribute to this project, please contact [GDII](https://www.chess.com/member/gdii) (or on Discord: GammaDeltaII).
+## Contribute / Contact
+If you would like to contribute to this project, feel free to create a pull request.
+Contact: [GDII](https://www.chess.com/member/gdii) (a.k.a. GammaDeltaII on Discord).
 
 ## Repository
 https://github.com/GammaDeltaII/4PlayerChess
