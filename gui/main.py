@@ -280,7 +280,7 @@ class MainWindow(QMainWindow, Ui_mainWindow):
                 self.setFrameShape(QFrame.NoFrame)
                 self.setFocusPolicy(Qt.NoFocus)
                 self.setStyleSheet("""
-                QListWidget {color: rgb(0, 0, 0); font-family: Arial; font-weight: bold; font-size: 12;
+                QListWidget {color: rgb(0, 0, 0); font-family: Trebuchet MS; font-weight: bold; font-size: 12;
                 padding: 2px; margin: 0px;}
                 QListWidget::item:selected {background-color: rgba(255, 255, 0, 0.3);}
                 """)
@@ -288,7 +288,7 @@ class MainWindow(QMainWindow, Ui_mainWindow):
             def sizeHint(self):
                 """Implements sizeHint() method."""
                 rowWidth = sum(self.item(index).sizeHint().width() for index in range(self.count()))
-                fm = QFontMetrics(QFont('Arial', 12, QFont.Bold))
+                fm = QFontMetrics(QFont('Trebuchet MS', 12, QFont.Bold))
                 padding = 2  # Row padding
                 width = 290
                 height = fm.height() * (rowWidth // width + 1) + 2 * padding
@@ -302,7 +302,7 @@ class MainWindow(QMainWindow, Ui_mainWindow):
 
             def sizeHint(self):
                 """Implements sizeHint() method."""
-                fm = QFontMetrics(QFont('Arial', 12, QFont.Bold))
+                fm = QFontMetrics(QFont('Trebuchet MS', 12, QFont.Bold))
                 spacing = 10  # TODO get rid of the item spacing somehow
                 width = fm.width(self.text()) + 2 * spacing
                 height = fm.height()
@@ -328,13 +328,13 @@ class MainWindow(QMainWindow, Ui_mainWindow):
                 row.itemClicked.connect(lambda item, this=row: self.moveListItemClicked(item, this))
                 if level == 1:
                     row.setStyleSheet("""
-                    QListWidget {color: rgb(100, 100, 100); font-weight: bold; font-size: 12; 
+                    QListWidget {color: rgb(100, 100, 100); font-family: Trebuchet MS; font-weight: bold; font-size: 12; 
                     background-color: rgb(240, 240, 240); padding: 2px; margin: 0px;}
                     QListWidget::item:selected {color: rgb(100, 100, 100); background-color: rgba(255, 255, 0, 0.3);}
                     """)
                 elif level > 1:
                     row.setStyleSheet("""
-                    QListWidget {color: rgb(150, 150, 150); font-weight: bold; font-size: 12; 
+                    QListWidget {color: rgb(150, 150, 150); font-family: Trebuchet MS; font-weight: bold; font-size: 12; 
                     background-color: rgb(240, 240, 240); padding: 2px; margin: 0px;}
                     QListWidget::item:selected {color: rgb(150, 150, 150); background-color: rgba(255, 255, 0, 0.3);}
                     """)
@@ -354,13 +354,13 @@ class MainWindow(QMainWindow, Ui_mainWindow):
                 row.itemClicked.connect(lambda item, this=row: self.moveListItemClicked(item, this))
                 if level == 1:
                     row.setStyleSheet("""
-                    QListWidget {color: rgb(100, 100, 100); font-weight: bold; font-size: 12; 
+                    QListWidget {color: rgb(100, 100, 100); font-family: Trebuchet MS; font-weight: bold; font-size: 12; 
                     background-color: rgb(240, 240, 240); padding: 2px; margin: 0px;}
                     QListWidget::item:selected {color: rgb(100, 100, 100); background-color: rgba(255, 255, 0, 0.3);}
                     """)
                 elif level > 1:
                     row.setStyleSheet("""
-                    QListWidget {color: rgb(150, 150, 150); font-weight: bold; font-size: 12; 
+                    QListWidget {color: rgb(150, 150, 150); font-family: Trebuchet MS; font-weight: bold; font-size: 12; 
                     background-color: rgb(240, 240, 240); padding: 2px; margin: 0px;}
                     QListWidget::item:selected {color: rgb(150, 150, 150); background-color: rgba(255, 255, 0, 0.3);}
                     """)

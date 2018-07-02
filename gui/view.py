@@ -19,8 +19,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from PyQt5.QtWidgets import QWidget, QPushButton, QLineEdit
-from PyQt5.QtCore import Qt, QSize, QRect, QPoint, pyqtSignal, QEvent
-from PyQt5.QtGui import QPainter, QPalette, QColor
+from PyQt5.QtCore import Qt, QSize, QRect, QRectF, QPoint, pyqtSignal, QEvent
+from PyQt5.QtGui import QPainter, QPalette, QColor, QFont
 from gui.board import Board
 
 
@@ -106,29 +106,54 @@ class View(QWidget):
         """Implements paintEvent() method. Draws squares and pieces on the board."""
         painter = QPainter()
         painter.begin(self)
-        # First draw squares, then highlights, then pieces
+        # Draw squares
         for rank in range(self.board.ranks):
             for file in range(self.board.files):
                 # Do not paint 3x3 sub-grids at the corners
                 if not ((file < 3 and rank < 3) or (file < 3 and rank > 10) or
                         (file > 10 and rank < 3) or (file > 10 and rank > 10)):
                     self.drawSquare(painter, file, rank)
+        # Draw highlights
         self.drawHighlights(painter)
         painter.fillRect(self.squareRect(12, 1), QColor('#40bf3b43'))
         painter.fillRect(self.squareRect(1, 1), QColor('#404185bf'))
         painter.fillRect(self.squareRect(1, 12), QColor('#40c09526'))
         painter.fillRect(self.squareRect(12, 12), QColor('#404e9161'))
+        # Draw pieces
         for rank in range(self.board.ranks):
             for file in range(self.board.files):
                 self.drawPiece(painter, file, rank)
         # if self.clickedPieceIcon and self.mouseRect:
         #     self.clickedPieceIcon.paint(painter, self.mouseRect, Qt.AlignCenter)
+        # Draw coordinates
+        for rank in range(self.board.ranks):
+            file = 0 if 2 < rank < 11 else 3
+            square = self.squareRect(file, rank)
+            square.moveTopLeft(QPoint(square.x() + 1, square.y() + 1))
+            square = QRectF(square)  # Only works with QRectF, so convert
+            color = self.palette().color(QPalette.Midlight) if not (file + rank) % 2 \
+                else self.palette().color(QPalette.Mid)
+            font = QFont('Trebuchet MS', 10, QFont.Bold)
+            painter.setPen(color)
+            painter.setFont(font)
+            painter.drawText(square, str(rank + 1))
+        for file in range(self.board.files):
+            rank = 0 if 2 < file < 11 else 3
+            square = self.squareRect(file, rank)
+            square.moveTopLeft(QPoint(square.x() - 1, square.y() - 1))
+            square = QRectF(square)  # Only works with QRectF, so convert
+            color = self.palette().color(QPalette.Midlight) if not (file + rank) % 2 \
+                else self.palette().color(QPalette.Mid)
+            font = QFont('Trebuchet MS', 10, QFont.Bold)
+            painter.setPen(color)
+            painter.setFont(font)
+            painter.drawText(square, Qt.AlignBottom | Qt.AlignRight, chr(file + 97))
         painter.end()
 
     def drawSquare(self, painter, file, rank):
         """Draws dark or light square at position (file, rank) using painter."""
         rect = self.squareRect(file, rank)
-        fillColor = self.palette().color(QPalette.Midlight) if (file+rank) % 2 else self.palette().color(QPalette.Mid)
+        fillColor = self.palette().color(QPalette.Midlight) if (file + rank) % 2 else self.palette().color(QPalette.Mid)
         painter.fillRect(rect, fillColor)
 
     def setPiece(self, char, icon):
