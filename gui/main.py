@@ -43,9 +43,7 @@ class MainWindow(QMainWindow, Ui_mainWindow):
         # Show license notice
         self.statusbar.showMessage('Copyright (C) 2018, GammaDeltaII (GNU GPL-3.0)', 5000)
 
-        # Create view and algorithm instances
-        self.view = View()
-        self.gridLayout.addWidget(self.view, 0, 0, 3, 1)
+        # Create algorithm instance (view instance is already created in UI code)
         self.algorithm = Teams()
 
         # Set piece icons
@@ -109,12 +107,10 @@ class MainWindow(QMainWindow, Ui_mainWindow):
         # Start new game
         self.algorithm.newGame()
 
-        # Initialize variables
+        # Initialize objects
         self.clickPoint = QPoint()
         self.selectedSquare = 0
         self.moveHighlight = 0
-
-        # Create application info popup
         self.popup = None
 
     class Popup(QWidget):

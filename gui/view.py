@@ -31,7 +31,7 @@ class View(QWidget):
     squareSizeChanged = pyqtSignal(QSize)
     playerNameEdited = pyqtSignal(str, str, str, str)
 
-    def __init__(self):
+    def __init__(self, *_):
         super().__init__()
         self.setAcceptDrops(True)
         self.squareSize = QSize(50, 50)
@@ -131,8 +131,8 @@ class View(QWidget):
             square = self.squareRect(file, rank)
             square.moveTopLeft(QPoint(square.x() + 1, square.y() + 1))
             square = QRectF(square)  # Only works with QRectF, so convert
-            color = self.palette().color(QPalette.Midlight) if not (file + rank) % 2 \
-                else self.palette().color(QPalette.Mid)
+            color = self.palette().color(QPalette.Light) if not (file + rank) % 2 \
+                else self.palette().color(QPalette.Dark)
             font = QFont('Trebuchet MS', 10, QFont.Bold)
             painter.setPen(color)
             painter.setFont(font)
@@ -142,8 +142,8 @@ class View(QWidget):
             square = self.squareRect(file, rank)
             square.moveTopLeft(QPoint(square.x() - 1, square.y() - 1))
             square = QRectF(square)  # Only works with QRectF, so convert
-            color = self.palette().color(QPalette.Midlight) if not (file + rank) % 2 \
-                else self.palette().color(QPalette.Mid)
+            color = self.palette().color(QPalette.Light) if not (file + rank) % 2 \
+                else self.palette().color(QPalette.Dark)
             font = QFont('Trebuchet MS', 10, QFont.Bold)
             painter.setPen(color)
             painter.setFont(font)
