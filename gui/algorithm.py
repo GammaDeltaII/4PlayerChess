@@ -147,7 +147,6 @@ class Algorithm(QObject):
         fen4 = self.startPosition
         self.setBoardState(fen4)
         self.fen4Generated.emit(fen4)
-        self.currentPlayerChanged.emit(self.Red)
 
     def getFen4(self, emitSignal=True):
         """Gets FEN4 from current board state."""
@@ -156,7 +155,7 @@ class Algorithm(QObject):
         fen4 += self.currentPlayer + ' '
         # TODO implement castling availability
         fen4 += '- '  # "K" if kingside castling available, "Q" if queenside, "-" if no player can castle
-        fen4 += '- '  # En passant target square
+        fen4 += '- '  # En passant target square, n/a
         fen4 += str(self.moveNumber) + ' '  # Number of quarter-moves
         fen4 += str(self.moveNumber // 4 + 1)  # Number of full moves, starting from 1
         if emitSignal:

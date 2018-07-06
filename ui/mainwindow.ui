@@ -420,7 +420,7 @@ QTabBar::tab:only-one {
          <attribute name="title">
           <string>Move List</string>
          </attribute>
-         <widget class="QWidget" name="">
+         <widget class="QWidget" name="layoutWidget">
           <property name="geometry">
            <rect>
             <x>10</x>
@@ -518,7 +518,7 @@ QTabBar::tab:only-one {
          <attribute name="title">
           <string>PGN4</string>
          </attribute>
-         <widget class="QWidget" name="">
+         <widget class="QWidget" name="layoutWidget">
           <property name="geometry">
            <rect>
             <x>10</x>
@@ -633,7 +633,7 @@ QPushButton#boardResetButton {
         <property name="title">
          <string>Current Position (FEN4):</string>
         </property>
-        <widget class="QWidget" name="">
+        <widget class="QWidget" name="layoutWidget">
          <property name="geometry">
           <rect>
            <x>10</x>

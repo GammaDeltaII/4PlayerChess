@@ -23,10 +23,20 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0).
 
 <!-- Types of changes: Added, Changed, Deprecated, Removed, Fixed -->
 
+## [0.2.0] - 06/07/2018
+### Added:
+- Move pieces by drag-drop
+- Board coordinates
+### Changed:
+- Style and layout
+### Removed:
+- View select (to be added back when implemented)
+### Fixed:
+- Minor bugs
+
 
 ## [0.1.0] - 30/06/2018
 Initial development release.
-
 ### Added:
 - Click-to-move chess board with move list and support for variations
 - Load and save games and set positions with FEN4 and PGN4
@@ -36,4 +46,5 @@ Initial development release.
 
 
 <!-- Links to releases -->
+[0.2.0]: https://github.com/GammaDeltaII/4PlayerChess/releases/tag/0.2.0
 [0.1.0]: https://github.com/GammaDeltaII/4PlayerChess/releases/tag/0.1.0

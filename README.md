@@ -19,8 +19,17 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 <img src="resources/img/icon.png" width="100" height="100">
 
-# 4 Player Chess GUI
-A basic GUI for 4 Player Chess to analyze lines. This project is a work in progress. Currently, it only supports the Teams variant. Free-For-All (FFA) may be added in the future.
+# 4PlayerChess
+A basic GUI for Four-Player Chess to analyze lines. This project is a work in progress. Currently, it only supports the Teams variant. Free-For-All (FFA) may be added in the future.
+
+**Latest Release:** version [0.2.0](https://github.com/GammaDeltaII/4PlayerChess/releases/tag/0.2.0)
+
+## Features
+- Board with move, turn and piece highlighting
+- Drag & drop or click to move pieces
+- Clickable move list with support for variations
+- Load and save games and set positions with FEN4 and PGN4
+- Editable player name labels
 
 ## Getting Started
 This program is cross-platform compatible (macOS, Linux, Windows). The following instructions will guide you to install the prerequisites and run the program.

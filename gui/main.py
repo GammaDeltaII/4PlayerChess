@@ -24,11 +24,10 @@ from PyQt5.QtCore import Qt, QSize, QPoint, QRect
 from PyQt5.QtGui import QIcon, QColor, QFont, QFontMetrics, QPainter
 from ui.mainwindow import Ui_mainWindow
 from gui.algorithm import Teams
-from gui.view import View
 
 # Semantic versioning: N.N.N-{alpha|beta|rc}.N
 MAJOR = str(0)
-MINOR = str(1)
+MINOR = str(2)
 PATCH = str(0)
 PRE_RELEASE = False * ('-' + 'alpha' + str(1))  # alpha, beta or rc (= release candidate)
 VERSION = MAJOR + '.' + MINOR + '.' + PATCH + PRE_RELEASE
@@ -63,6 +62,7 @@ class MainWindow(QMainWindow, Ui_mainWindow):
         self.view.clicked.connect(self.viewClicked)
         self.algorithm.boardChanged.connect(self.view.setBoard)  # If algorithm changes board, view must update board
         self.algorithm.currentPlayerChanged.connect(self.view.highlightPlayer)
+        self.algorithm.currentPlayerChanged.connect(self.view.setCurrentPlayer)  # For drag-drop
         self.algorithm.moveTextChanged.connect(self.updateMoveList)
         self.algorithm.selectMove.connect(self.selectMove)
         self.algorithm.removeMoveSelection.connect(self.removeMoveSelection)
@@ -72,6 +72,8 @@ class MainWindow(QMainWindow, Ui_mainWindow):
         self.view.playerNameEdited.connect(self.algorithm.updatePlayerNames)
         self.algorithm.playerNamesChanged.connect(self.view.setPlayerNames)
         self.algorithm.addHighlight.connect(self.addHighlight)
+        self.view.dragStarted.connect(self.selectDragStartSquare)
+        self.view.pieceMoved.connect(self.movePiece)
 
         # Connect menu actions
         self.actionAbout.triggered.connect(self.showAboutWindow)
@@ -216,6 +218,62 @@ class MainWindow(QMainWindow, Ui_mainWindow):
                 self.moveHighlight = 0
             self.selectedSquare = 0
 
+    def selectDragStartSquare(self, square):
+        """Highlights the dragged piece origin square."""
+        if self.algorithm.currentPlayer == self.algorithm.Red:
+            color = QColor('#33bf3b43')
+        elif self.algorithm.currentPlayer == self.algorithm.Blue:
+            color = QColor('#334185bf')
+        elif self.algorithm.currentPlayer == self.algorithm.Yellow:
+            color = QColor('#33c09526')
+        elif self.algorithm.currentPlayer == self.algorithm.Green:
+            color = QColor('#334e9161')
+        else:
+            color = QColor('#00000000')
+        # Remove click highlight, if it exists
+        if self.selectedSquare:
+            self.view.removeHighlight(self.selectedSquare)
+            self.clickPoint = QPoint()
+            self.selectedSquare = 0
+        squareData = self.view.board.getData(square.x(), square.y())
+        if squareData != ' ' and squareData[0] == self.algorithm.currentPlayer:
+            self.selectedSquare = self.view.SquareHighlight(square.x(), square.y(), color)
+            self.view.addHighlight(self.selectedSquare)
+
+    def movePiece(self, fromSquare, toSquare):
+        """Handles piece drag event to move dragged piece to drop square."""
+        if self.algorithm.currentPlayer == self.algorithm.Red:
+            color = QColor('#33bf3b43')
+        elif self.algorithm.currentPlayer == self.algorithm.Blue:
+            color = QColor('#334185bf')
+        elif self.algorithm.currentPlayer == self.algorithm.Yellow:
+            color = QColor('#33c09526')
+        elif self.algorithm.currentPlayer == self.algorithm.Green:
+            color = QColor('#334e9161')
+        else:
+            color = QColor('#00000000')
+        moved = self.algorithm.makeMove(fromSquare.x(), fromSquare.y(), toSquare.x(), toSquare.y())
+        if not moved:
+            self.view.removeHighlight(self.selectedSquare)
+            self.view.maskedSquare = None
+        else:
+            self.moveHighlight = self.view.SquareHighlight(toSquare.x(), toSquare.y(), color)
+            self.view.addHighlight(self.moveHighlight)
+            # Remove highlights of next player
+            if self.algorithm.currentPlayer == self.algorithm.Red:
+                color = QColor('#33bf3b43')
+            elif self.algorithm.currentPlayer == self.algorithm.Blue:
+                color = QColor('#334185bf')
+            elif self.algorithm.currentPlayer == self.algorithm.Yellow:
+                color = QColor('#33c09526')
+            elif self.algorithm.currentPlayer == self.algorithm.Green:
+                color = QColor('#334e9161')
+            else:
+                color = QColor('#00000000')
+            self.view.removeHighlightsOfColor(color)
+            self.moveHighlight = 0
+        self.selectedSquare = 0
+
     def keyPressEvent(self, event):
         """Handles arrow key press events to go to previous, next, first or last move."""
         if event.key() == Qt.Key_Left:
@@ -261,6 +319,7 @@ class MainWindow(QMainWindow, Ui_mainWindow):
         """Gets FEN4 from the text field to set the board accordingly."""
         fen4 = self.fenField.toPlainText()
         self.algorithm.setBoardState(fen4)
+        self.moveListWidget.clear()
         self.view.repaint()  # Forced repaint
 
     def updateMoveList(self, moveText):
@@ -283,11 +342,17 @@ class MainWindow(QMainWindow, Ui_mainWindow):
 
             def sizeHint(self):
                 """Implements sizeHint() method."""
-                rowWidth = sum(self.item(index).sizeHint().width() for index in range(self.count()))
+                width = 290
+                rows = 1
+                rowWidth = 0
+                for index in range(self.count()):
+                    rowWidth += self.item(index).sizeHint().width()
+                    if rowWidth > width:
+                        rows += 1
+                        rowWidth = self.item(index).sizeHint().width()
                 fm = QFontMetrics(QFont('Trebuchet MS', 12, QFont.Bold))
                 padding = 2  # Row padding
-                width = 290
-                height = fm.height() * (rowWidth // width + 1) + 2 * padding
+                height = fm.height() * rows + 2 * padding
                 return QSize(width, height)
 
         class RowItem(QListWidgetItem):

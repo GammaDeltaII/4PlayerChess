@@ -19,8 +19,9 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from PyQt5.QtWidgets import QWidget, QPushButton, QLineEdit
-from PyQt5.QtCore import Qt, QSize, QRect, QRectF, QPoint, pyqtSignal, QEvent
-from PyQt5.QtGui import QPainter, QPalette, QColor, QFont
+from PyQt5.QtCore import Qt, QSize, QRect, QRectF, QPoint, pyqtSignal, QEvent, QByteArray, QDataStream, QIODevice, \
+    QMimeData
+from PyQt5.QtGui import QPainter, QPalette, QColor, QFont, QDrag, QIcon
 from gui.board import Board
 
 
@@ -30,21 +31,20 @@ class View(QWidget):
     clicked = pyqtSignal(QPoint)
     squareSizeChanged = pyqtSignal(QSize)
     playerNameEdited = pyqtSignal(str, str, str, str)
+    pieceMoved = pyqtSignal(QPoint, QPoint)
+    dragStarted = pyqtSignal(QPoint)
 
     def __init__(self, *_):
         super().__init__()
-        self.setAcceptDrops(True)
         self.squareSize = QSize(50, 50)
         self.board = Board(14, 14)
         self.pieces = {}
-        # self.clickedPiece = None
-        # self.clickedPieceIcon = None
-        # self.mouseRect = None
         self.highlights = []
         self.playerHighlights = {'r': self.PlayerHighlight(12, 1, QColor('#bf3b43')),
                                  'b': self.PlayerHighlight(1, 1, QColor('#4185bf')),
                                  'y': self.PlayerHighlight(1, 12, QColor('#c09526')),
                                  'g': self.PlayerHighlight(12, 12, QColor('#4e9161'))}
+        # Player labels
         self.redName = None
         self.redNameEdit = None
         self.blueName = None
@@ -54,6 +54,13 @@ class View(QWidget):
         self.greenName = None
         self.greenNameEdit = None
         self.createPlayerLabels()
+        # Drag-drop
+        self.setAcceptDrops(True)
+        self.dragStart = None
+        self.clickedSquare = None
+        self.maskedSquare = None
+        self.mouseButton = None
+        self.currentPlayer = None
 
     class SquareHighlight:
         """A square highlight type."""
@@ -67,6 +74,12 @@ class View(QWidget):
     class PlayerHighlight(SquareHighlight):
         """A player highlight type. Same as square highlight, just renamed for convenience (unaltered subclass)."""
         pass
+
+    def setCurrentPlayer(self, player):
+        """Updates current player, if changed."""
+        if self.currentPlayer == player:
+            return
+        self.currentPlayer = player
 
     def setBoard(self, board):
         """Updates board, if changed. Disconnects signals from old board and connects them to new board."""
@@ -95,12 +108,12 @@ class View(QWidget):
 
     def sizeHint(self):
         """Implements sizeHint() method. Computes and returns size based on size of board squares."""
-        return QSize(self.squareSize.width()*self.board.files, self.squareSize.height()*self.board.ranks)
+        return QSize(self.squareSize.width() * self.board.files, self.squareSize.height() * self.board.ranks)
 
     def squareRect(self, file, rank):
         """Returns square of type QRect at position (file, rank)."""
         sqSize = self.squareSize
-        return QRect(QPoint(file*sqSize.width(), (self.board.ranks-(rank+1))*sqSize.height()), sqSize)
+        return QRect(QPoint(file * sqSize.width(), (self.board.ranks - (rank + 1)) * sqSize.height()), sqSize)
 
     def paintEvent(self, event):
         """Implements paintEvent() method. Draws squares and pieces on the board."""
@@ -122,9 +135,8 @@ class View(QWidget):
         # Draw pieces
         for rank in range(self.board.ranks):
             for file in range(self.board.files):
-                self.drawPiece(painter, file, rank)
-        # if self.clickedPieceIcon and self.mouseRect:
-        #     self.clickedPieceIcon.paint(painter, self.mouseRect, Qt.AlignCenter)
+                if not self.maskedSquare == QPoint(file, rank):  # When dragging a piece, don't paint it
+                    self.drawPiece(painter, file, rank)
         # Draw coordinates
         for rank in range(self.board.ranks):
             file = 0 if 2 < rank < 11 else 3
@@ -171,12 +183,6 @@ class View(QWidget):
         char = self.board.getData(file, rank)
         if char != ' ':
             icon = self.piece(char)
-            # draggablePiece = QLabel(self)
-            # iconPixmap = icon.pixmap(QSize(50, 50))
-            # QCoreApplication.setAttribute(Qt.AA_UseHighDpiPixmaps)
-            # draggablePiece.setPixmap(iconPixmap)
-            # draggablePiece.move(rect.x(), rect.y())
-            # draggablePiece.show()
             if not icon.isNull():
                 icon.paint(painter, rect, Qt.AlignCenter)
 
@@ -192,27 +198,97 @@ class View(QWidget):
     def mouseReleaseEvent(self, event):
         """Implements mouseReleaseEvent() method. Emits signal with clicked square of type QPoint as value."""
         point = self.squareAt(event.pos())
+        if not self.mouseButton == Qt.LeftButton:
+            return
         if point.isNull():
             return
         self.clicked.emit(point)
-        # self.clickedPiece = None
-        # self.clickedPieceIcon = None
-        # self.mouseRect = None
 
-    # def mousePressEvent(self, event):
-    #     point = self.squareAt(event.pos())
-    #     if point.isNull():
-    #         return
-    #     self.clickedPiece = self.board.getData(point.x(), point.y())
-    #
-    # def mouseMoveEvent(self, event):
-    #     position = event.pos()
-    #     offset = QPoint(self.squareSize.width() / 2, self.squareSize.height() / 2)
-    #     self.mouseRect = QRect(position - offset, self.squareSize)
-    #     if self.clickedPiece and self.clickedPiece != ' ':
-    #         self.clickedPieceIcon = self.piece(self.clickedPiece)
-    #         if not self.clickedPieceIcon.isNull():
-    #             self.update()
+    def mousePressEvent(self, event):
+        """Implements mousePressEvent() method. Records drag start position, origin square and mouse button."""
+        self.dragStart = event.pos()
+        self.clickedSquare = self.squareAt(event.pos())
+        self.mouseButton = event.buttons()
+
+    def mouseMoveEvent(self, event):
+        """Implements mouseMoveEvent() method. Executes drag action."""
+        if not event.buttons() == Qt.LeftButton:
+            return
+        if not self.clickedSquare or not self.dragStart:
+            return
+        if (event.pos() - self.dragStart).manhattanLength() < 5:
+            return
+        char = self.board.getData(self.clickedSquare.x(), self.clickedSquare.y())
+        if char[0] != self.currentPlayer:
+            return
+        if char != ' ':
+            icon = self.piece(char)
+            if icon.isNull():
+                return
+            iconPosition = self.squareRect(self.clickedSquare.x(), self.clickedSquare.y()).topLeft()
+            offset = QPoint(event.pos() - iconPosition)
+            # Pixmap shown under cursor while dragging
+            dpr = 2  # device pixel ratio
+            pixmap = icon.pixmap(QSize(50 * dpr, 50 * dpr))
+            pixmap.setDevicePixelRatio(dpr)
+            # Serialize drag-drop data into QByteArray
+            data = QByteArray()
+            dataStream = QDataStream(data, QIODevice.WriteOnly)
+            dataStream << icon << offset
+            # Custom MIME data
+            mimeData = QMimeData()
+            mimeData.setData('dragdrop', data)
+            # Drag action
+            drag = QDrag(self)
+            drag.setMimeData(mimeData)
+            drag.setPixmap(pixmap)
+            drag.setHotSpot(event.pos() - iconPosition)
+            self.maskedSquare = self.clickedSquare
+            self.dragStarted.emit(self.clickedSquare)
+            drag.exec_()
+            self.maskedSquare = None
+
+    def dragEnterEvent(self, event):
+        """Implements dragEnterEvent() method."""
+        if event.mimeData().hasFormat('dragdrop'):
+            if event.source() == self:
+                event.setDropAction(Qt.MoveAction)
+                event.accept()
+            else:
+                event.ignore()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        """Implements dragMoveEvent() method."""
+        if event.mimeData().hasFormat('dragdrop'):
+            if event.source() == self:
+                event.setDropAction(Qt.MoveAction)
+                event.accept()
+            else:
+                event.ignore()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        """Implements dropEvent() method. Handles drop action."""
+        if event.mimeData().hasFormat('dragdrop'):
+            # Read data serialized from the QByteArray
+            data = event.mimeData().data('dragdrop')
+            dataStream = QDataStream(data, QIODevice.ReadOnly)
+            icon = QIcon()
+            offset = QPoint()
+            dataStream >> icon >> offset
+            # Send signal to make the move
+            square = self.squareAt(event.pos())
+            self.pieceMoved.emit(self.clickedSquare, square)
+            if event.source() == self:
+                event.setDropAction(Qt.MoveAction)
+                event.accept()
+            else:
+                event.ignore()
+        else:
+            event.ignore()
 
     def addHighlight(self, highlight):
         """Adds highlight to the list and redraws view."""
