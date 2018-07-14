@@ -426,10 +426,41 @@ QTabBar::tab:only-one {
             <x>10</x>
             <y>10</y>
             <width>302</width>
-            <height>543</height>
+            <height>542</height>
            </rect>
           </property>
           <layout class="QVBoxLayout" name="verticalLayout_2">
+           <item>
+            <widget class="CommentEdit" name="commentField">
+             <property name="sizePolicy">
+              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+               <horstretch>0</horstretch>
+               <verstretch>0</verstretch>
+              </sizepolicy>
+             </property>
+             <property name="minimumSize">
+              <size>
+               <width>300</width>
+               <height>90</height>
+              </size>
+             </property>
+             <property name="maximumSize">
+              <size>
+               <width>16777215</width>
+               <height>90</height>
+              </size>
+             </property>
+             <property name="styleSheet">
+              <string notr="true">background-color: rgb(255, 255, 255);</string>
+             </property>
+             <property name="frameShape">
+              <enum>QFrame::NoFrame</enum>
+             </property>
+             <property name="placeholderText">
+              <string>Enter comment for this move...</string>
+             </property>
+            </widget>
+           </item>
            <item>
             <widget class="QListWidget" name="moveListWidget">
              <property name="sizePolicy">
@@ -441,7 +472,7 @@ QTabBar::tab:only-one {
              <property name="minimumSize">
               <size>
                <width>300</width>
-               <height>500</height>
+               <height>400</height>
               </size>
              </property>
              <property name="font">
@@ -457,7 +488,7 @@ QTabBar::tab:only-one {
               <string notr="true">background-color: rgb(255, 255, 255);</string>
              </property>
              <property name="frameShape">
-              <enum>QFrame::StyledPanel</enum>
+              <enum>QFrame::NoFrame</enum>
              </property>
              <property name="editTriggers">
               <set>QAbstractItemView::NoEditTriggers</set>
@@ -469,6 +500,9 @@ QTabBar::tab:only-one {
            </item>
            <item>
             <layout class="QHBoxLayout" name="horizontalLayout_2">
+             <property name="spacing">
+              <number>5</number>
+             </property>
              <item>
               <widget class="QPushButton" name="firstMoveButton">
                <property name="statusTip">
@@ -542,13 +576,24 @@ QTabBar::tab:only-one {
                <height>500</height>
               </size>
              </property>
+             <property name="font">
+              <font>
+               <family>Trebuchet MS</family>
+              </font>
+             </property>
              <property name="styleSheet">
               <string notr="true">background-color: rgb(255, 255, 255);</string>
+             </property>
+             <property name="frameShape">
+              <enum>QFrame::NoFrame</enum>
              </property>
             </widget>
            </item>
            <item>
             <layout class="QHBoxLayout" name="horizontalLayout_3">
+             <property name="spacing">
+              <number>5</number>
+             </property>
              <item>
               <widget class="QPushButton" name="loadPgnButton">
                <property name="statusTip">
@@ -660,8 +705,13 @@ QPushButton#boardResetButton {
             <property name="maximumSize">
              <size>
               <width>16777215</width>
-              <height>30</height>
+              <height>25</height>
              </size>
+            </property>
+            <property name="font">
+             <font>
+              <family>Trebuchet MS</family>
+             </font>
             </property>
             <property name="statusTip">
              <string>Enter FEN4</string>
@@ -669,6 +719,9 @@ QPushButton#boardResetButton {
             <property name="styleSheet">
              <string notr="true">background-color: rgb(255, 255, 255);
 color: rgb(0, 0, 0);</string>
+            </property>
+            <property name="frameShape">
+             <enum>QFrame::NoFrame</enum>
             </property>
             <property name="verticalScrollBarPolicy">
              <enum>Qt::ScrollBarAlwaysOff</enum>
@@ -927,6 +980,11 @@ color: grey;</string>
    <extends>QWidget</extends>
    <header>/gui/view</header>
    <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>CommentEdit</class>
+   <extends>QPlainTextEdit</extends>
+   <header>/gui/view</header>
   </customwidget>
  </customwidgets>
  <resources/>

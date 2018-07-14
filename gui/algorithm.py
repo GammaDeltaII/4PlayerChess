@@ -22,6 +22,7 @@ from PyQt5.QtCore import QObject, pyqtSignal
 from PyQt5.QtGui import QColor
 from collections import deque
 from datetime import date
+from re import split
 from gui.board import Board
 
 
@@ -74,6 +75,7 @@ class Algorithm(QObject):
             self.children = children
             self.parent = parent
             self.fen4 = None
+            self.comment = None
 
         def add(self, node):
             """Adds node to children."""
@@ -394,6 +396,18 @@ class Algorithm(QObject):
 
         self.pgn4Generated.emit(pgn4)
 
+    def updateMoveText(self):
+        """Updates movetext and dictionary."""
+        self.moveText = ''
+        self.moveDict.clear()
+        self.index = 0
+        self.getMoveText(self.currentMove.getRoot(), self.fenMoveNumber)
+        self.inverseMoveDict = {value: key for key, value in self.moveDict.items()}
+        self.moveTextChanged.emit(self.moveText)
+        if self.currentMove.name != 'root':
+            key = self.inverseMoveDict[self.currentMove]
+            self.selectMove.emit(key)
+
     def getMoveText(self, node, move=1, var=0):
         """Traverses move tree to generate movetext and updates move dictionary to keep track of the nodes associated
         with the movetext."""
@@ -431,6 +445,8 @@ class Algorithm(QObject):
             self.moveText += token + ' '
             self.moveDict[(self.index, token)] = main
             self.index += 1
+            if main.comment:
+                self.moveText += '{ ' + main.comment + ' } '
             # Expand variations
             for variation in variations:
                 if self.moveText[-2] == ')':
@@ -454,6 +470,8 @@ class Algorithm(QObject):
                 self.moveText += token + ' '
                 self.moveDict[(self.index, token)] = variation
                 self.index += 1
+                if variation.comment:
+                    self.moveText += '{ ' + variation.comment + ' } '
                 self.getMoveText(variation, move + 1, var + 1)
             # Expand main move
             self.index += 1
@@ -469,6 +487,8 @@ class Algorithm(QObject):
             self.moveText += token + ' '
             self.moveDict[(self.index, token)] = main
             self.index += 1
+            if main.comment:
+                self.moveText += '{ ' + main.comment + ' } '
             self.getMoveText(main, move + 1, var)
         # Node is leaf node (i.e. end of variation or main line)
         else:
@@ -476,6 +496,19 @@ class Algorithm(QObject):
                 token = ')'
                 self.moveText += token + ' '
                 self.moveDict[(self.index, token)] = None
+
+    def split_(self, movetext):
+        """Splits movetext into tokens."""
+        x = split('\s+(?={)|(?<=})\s+', movetext)  # regex: one or more spaces followed by { or preceded by }
+        movetext = []
+        for y in x:
+            if y:
+                if y[0] != '{':
+                    for z in y.split():
+                        movetext.append(z)
+                else:
+                    movetext.append(y)
+        return movetext
 
     def parsePgn4(self, pgn4):
         """Parses PGN4 and sets game state accordingly."""
@@ -513,7 +546,7 @@ class Algorithm(QObject):
                     # No movetext to process
                     break
                 roots = []
-                tokens = line.split()
+                tokens = self.split_(line)
                 prev = None
                 i = 0
                 for token in tokens:
@@ -523,6 +556,9 @@ class Algorithm(QObject):
                         next_ = None
                     if token[0].isdigit() or token[0] == '.':
                         pass
+                    elif token[0] == '{':
+                        # Comment
+                        self.currentMove.comment = token[1:-1].strip()
                     elif token == '(':
                         # Next move is variation
                         if not prev == ')':
@@ -622,16 +658,8 @@ class Teams(Algorithm):
             move = self.Node(moveString, [], self.currentMove)
             self.currentMove.add(move)
             self.currentMove = move
-
-            # Update movetext and move dictionary
-            self.moveText = ''
-            self.moveDict.clear()
-            self.index = 0
-            self.getMoveText(self.currentMove.getRoot(), self.fenMoveNumber)
-            self.inverseMoveDict = {value: key for key, value in self.moveDict.items()}
-            key = self.inverseMoveDict[self.currentMove]
-            self.moveTextChanged.emit(self.moveText)
-            self.selectMove.emit(key)
+            # Update movetext and move dictionary and select current move in move list
+            self.updateMoveText()
         else:
             # Move already exists. Update current move, but do not change the move tree
             for child in self.currentMove.children:

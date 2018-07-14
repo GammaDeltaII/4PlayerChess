@@ -24,10 +24,11 @@ from PyQt5.QtCore import Qt, QSize, QPoint, QRect
 from PyQt5.QtGui import QIcon, QColor, QFont, QFontMetrics, QPainter
 from ui.mainwindow import Ui_mainWindow
 from gui.algorithm import Teams
+from gui.view import Comment
 
 # Semantic versioning: N.N.N-{alpha|beta|rc}.N
 MAJOR = str(0)
-MINOR = str(2)
+MINOR = str(3)
 PATCH = str(0)
 PRE_RELEASE = False * ('-' + 'alpha' + str(1))  # alpha, beta or rc (= release candidate)
 VERSION = MAJOR + '.' + MINOR + '.' + PATCH + PRE_RELEASE
@@ -44,6 +45,13 @@ class MainWindow(QMainWindow, Ui_mainWindow):
 
         # Create algorithm instance (view instance is already created in UI code)
         self.algorithm = Teams()
+
+        # Create comment label
+        self.comment = Comment()
+        self.comment.setParent(self.moveListTab)
+        self.comment.setEnabled(False)
+        self.comment.move(self.commentField.parent().pos())
+        self.comment.show()
 
         # Set piece icons
         pieces = ['rP', 'rN', 'rR', 'rB', 'rQ', 'rK',
@@ -74,6 +82,7 @@ class MainWindow(QMainWindow, Ui_mainWindow):
         self.algorithm.addHighlight.connect(self.addHighlight)
         self.view.dragStarted.connect(self.selectDragStartSquare)
         self.view.pieceMoved.connect(self.movePiece)
+        self.commentField.focusOut.connect(self.setComment)
 
         # Connect menu actions
         self.actionAbout.triggered.connect(self.showAboutWindow)
@@ -81,6 +90,7 @@ class MainWindow(QMainWindow, Ui_mainWindow):
         self.actionNew_Game.triggered.connect(self.algorithm.newGame)
         self.actionNew_Game.triggered.connect(self.view.repaint)  # Forced repaint
         self.actionNew_Game.triggered.connect(self.moveListWidget.clear)
+        self.actionNew_Game.triggered.connect(self.resetComment)
         self.actionLoad_Game.triggered.connect(self.openFileNameDialog)
         self.actionSave_Game_As.triggered.connect(self.saveFileDialog)
         self.actionCopy_FEN4.triggered.connect(self.fenField.selectAll)
@@ -94,6 +104,7 @@ class MainWindow(QMainWindow, Ui_mainWindow):
         self.boardResetButton.clicked.connect(self.algorithm.newGame)
         self.boardResetButton.clicked.connect(self.view.repaint)  # Forced repaint
         self.boardResetButton.clicked.connect(self.moveListWidget.clear)
+        self.boardResetButton.clicked.connect(self.resetComment)
         self.setFenButton.clicked.connect(self.setFen4)
         self.loadPgnButton.clicked.connect(self.openFileNameDialog)
         self.savePgnButton.clicked.connect(self.saveFileDialog)
@@ -105,6 +116,7 @@ class MainWindow(QMainWindow, Ui_mainWindow):
         self.firstMoveButton.clicked.connect(self.view.repaint)
         self.lastMoveButton.clicked.connect(self.algorithm.lastMove)
         self.lastMoveButton.clicked.connect(self.view.repaint)
+        self.comment.clicked.connect(self.editComment)
 
         # Start new game
         self.algorithm.newGame()
@@ -320,7 +332,99 @@ class MainWindow(QMainWindow, Ui_mainWindow):
         fen4 = self.fenField.toPlainText()
         self.algorithm.setBoardState(fen4)
         self.moveListWidget.clear()
+        self.resetComment()
         self.view.repaint()  # Forced repaint
+
+    def setMoveComment(self, comment=True):
+        """Saves comment for current move."""
+        if comment:
+            text = self.commentField.toPlainText()
+            text = text.replace('\n', ' ')
+            self.algorithm.currentMove.comment = text
+        else:
+            self.algorithm.currentMove.comment = None
+
+    def editComment(self):
+        """Activates comment edit field."""
+        if self.algorithm.currentMove.comment:
+            self.commentField.setPlainText(self.algorithm.currentMove.comment)
+            self.commentField.selectAll()
+        else:
+            self.commentField.clear()
+        self.comment.setHidden(True)
+        self.commentField.setFocus(True)
+
+    def setComment(self):
+        """Updates comment and deactivates comment edit field."""
+        if self.commentField.toPlainText():
+            self.comment.setText(self.commentField.toPlainText())
+            self.comment.setStyleSheet("""
+            border: 0px;
+            padding: 4px;
+            border-radius: 0px;
+            background-color: white;
+            text-align: top left;
+            color: black;
+            font-family: Trebuchet MS;
+            """)
+            self.setMoveComment()
+            self.algorithm.updateMoveText()
+            self.algorithm.getPgn4()
+        else:
+            if self.algorithm.currentMove.name != 'root':
+                self.comment.setText('Enter comment for this move...')
+            self.comment.setStyleSheet("""
+            border: 0px;
+            padding: 4px;
+            border-radius: 0px;
+            background-color: white;
+            text-align: top left;
+            color: grey;
+            font-family: Trebuchet MS;
+            """)
+            self.setMoveComment(False)
+        self.comment.setHidden(False)
+
+    def resetComment(self):
+        """Resets move comment."""
+        self.comment.setText('')
+        self.comment.setEnabled(False)
+        self.commentField.clear()
+        self.comment.setStyleSheet("""
+        border: 0px;
+        padding: 4px;
+        border-radius: 0px;
+        background-color: white;
+        text-align: top left;
+        color: grey;
+        font-family: Trebuchet MS;
+        """)
+
+    def showComment(self, node):
+        """Shows comment for current move."""
+        if node.comment:
+            self.comment.setText(node.comment)
+            self.comment.setStyleSheet("""
+            border: 0px;
+            padding: 4px;
+            border-radius: 0px;
+            background-color: white;
+            text-align: top left;
+            color: black;
+            font-family: Trebuchet MS;
+            """)
+        else:
+            if node.name != 'root':
+                self.comment.setText('Enter comment for this move...')
+            self.comment.setStyleSheet("""
+            border: 0px;
+            padding: 4px;
+            border-radius: 0px;
+            background-color: white;
+            text-align: top left;
+            color: grey;
+            font-family: Trebuchet MS;
+            """)
 
     def updateMoveList(self, moveText):
         """Updates move list based on movetext."""
@@ -370,14 +474,17 @@ class MainWindow(QMainWindow, Ui_mainWindow):
                 return QSize(width, height)
 
         self.moveListWidget.clear()
-        tokens = moveText.split()
+        tokens = self.algorithm.split_(moveText)
         row = Row()
         row.itemClicked.connect(lambda item, this=row: self.moveListItemClicked(item, this))
         level = 0
         for token in tokens:
             rowItem = RowItem(token)
             rowItem.setSizeHint(rowItem.sizeHint())  # Update size hack
-            if token == '(':
+            if token[0] == '{':
+                # Comment
+                self.commentField.setPlainText(token[1:-1])
+            elif token == '(':
                 # Start of new variation
                 level += 1
                 if not row.count() == 0:
@@ -437,6 +544,7 @@ class MainWindow(QMainWindow, Ui_mainWindow):
 
     def moveListItemClicked(self, clickedItem, clickedRow):
         """Handles move list click event to set game state to clicked move."""
+        # TODO only allow left click
         # If clicked item is not a move, remove selection
         char = clickedItem.text()[0]
         if char.isdigit() or char == '(' or char == ')' or char == '.':
@@ -467,6 +575,11 @@ class MainWindow(QMainWindow, Ui_mainWindow):
 
     def selectMove(self, key):
         """Makes current move selected in the move list."""
+        self.showComment(self.algorithm.moveDict[key])
+        if self.algorithm.currentMove.name != 'root':
+            self.comment.setEnabled(True)
+        else:
+            self.comment.setEnabled(False)
         moveIndex = key[0]
         index = 0
         notFound = True

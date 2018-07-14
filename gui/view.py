@@ -18,7 +18,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from PyQt5.QtWidgets import QWidget, QPushButton, QLineEdit
+from PyQt5.QtWidgets import QWidget, QPushButton, QLineEdit, QPlainTextEdit, QFrame
 from PyQt5.QtCore import Qt, QSize, QRect, QRectF, QPoint, pyqtSignal, QEvent, QByteArray, QDataStream, QIODevice, \
     QMimeData
 from PyQt5.QtGui import QPainter, QPalette, QColor, QFont, QDrag, QIcon
@@ -366,7 +366,7 @@ class View(QWidget):
             QLineEdit[player='green'] {color: #4e9161;}
             """)
 
-        def eventFilter(self, object, event):
+        def eventFilter(self, object_, event):
             """Handles focusOut event."""
             if event.type() == QEvent.FocusOut:
                 self.focusOut.emit()
@@ -465,3 +465,37 @@ class View(QWidget):
         self.blueName.setText(blue)
         self.yellowName.setText(yellow)
         self.greenName.setText(green)
+
+
+class Comment(QPushButton):
+    """Comment label."""
+    def __init__(self):
+        super().__init__()
+        self.setFixedSize(300, 90)
+        self.setStyleSheet("""
+        border: 0px;
+        padding: 4px;
+        border-radius: 0px;
+        background-color: white;
+        text-align: top left;
+        color: grey;
+        font-family: Trebuchet MS;
+        """)
+
+
+class CommentEdit(QPlainTextEdit):
+    """Comment edit field."""
+    focusOut = pyqtSignal()
+
+    def __init__(self, *_):
+        super().__init__()
+        self.setFixedSize(300, 90)
+        self.setFrameShape(QFrame.NoFrame)
+        self.installEventFilter(self)
+        self.setFont(QFont('Trebuchet MS'))
+
+    def eventFilter(self, object_, event):
+        """Handles focusOut and returnPressed event."""
+        if event.type() == QEvent.FocusOut:
+            self.focusOut.emit()
+        return False
