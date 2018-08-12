@@ -99,6 +99,9 @@ class MainWindow(QMainWindow, Ui_mainWindow):
         self.actionPaste_FEN4.triggered.connect(self.fenField.clear)
         self.actionPaste_FEN4.triggered.connect(self.fenField.paste)
         self.actionPaste_FEN4.triggered.connect(self.repaint)
+        self.actionRotate_Board_Left.triggered.connect(lambda: self.view.rotateBoard(-1))
+        self.actionRotate_Board_Right.triggered.connect(lambda: self.view.rotateBoard(1))
+        self.actionFlip_Board.triggered.connect(lambda: self.view.rotateBoard(2))
 
         # Connect button actions
         self.boardResetButton.clicked.connect(self.algorithm.newGame)

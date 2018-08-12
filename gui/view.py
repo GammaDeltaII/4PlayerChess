@@ -22,6 +22,7 @@ from PyQt5.QtWidgets import QWidget, QPushButton, QLineEdit, QPlainTextEdit, QFr
 from PyQt5.QtCore import Qt, QSize, QRect, QRectF, QPoint, pyqtSignal, QEvent, QByteArray, QDataStream, QIODevice, \
     QMimeData
 from PyQt5.QtGui import QPainter, QPalette, QColor, QFont, QDrag, QIcon
+from collections import deque
 from gui.board import Board
 
 
@@ -61,6 +62,8 @@ class View(QWidget):
         self.maskedSquare = None
         self.mouseButton = None
         self.currentPlayer = None
+        # Board orientation
+        self.orientation = deque(['r', 'b', 'y', 'g'])
 
     class SquareHighlight:
         """A square highlight type."""
@@ -74,6 +77,12 @@ class View(QWidget):
     class PlayerHighlight(SquareHighlight):
         """A player highlight type. Same as square highlight, just renamed for convenience (unaltered subclass)."""
         pass
+
+    def rotateBoard(self, rotation):
+        """Rotates board view (clockwise +, counterclockwise -)."""
+        self.orientation.rotate(rotation)
+        self.movePlayerLabels(self.orientation[0])
+        self.update()
 
     def setCurrentPlayer(self, player):
         """Updates current player, if changed."""
@@ -110,10 +119,18 @@ class View(QWidget):
         """Implements sizeHint() method. Computes and returns size based on size of board squares."""
         return QSize(self.squareSize.width() * self.board.files, self.squareSize.height() * self.board.ranks)
 
-    def squareRect(self, file, rank):
+    def squareRect(self, file, rank, orientation=None):
         """Returns square of type QRect at position (file, rank)."""
         sqSize = self.squareSize
-        return QRect(QPoint(file * sqSize.width(), (self.board.ranks - (rank + 1)) * sqSize.height()), sqSize)
+        if orientation == 'b':
+            return QRect(QPoint((self.board.ranks - (rank + 1)) * sqSize.width(),
+                                (self.board.files - (file + 1)) * sqSize.height()), sqSize)
+        elif orientation == 'y':
+            return QRect(QPoint((self.board.files - (file + 1)) * sqSize.width(), rank * sqSize.height()), sqSize)
+        elif orientation == 'g':
+            return QRect(QPoint(rank * sqSize.width(), file * sqSize.height()), sqSize)
+        else:  # red by default
+            return QRect(QPoint(file * sqSize.width(), (self.board.ranks - (rank + 1)) * sqSize.height()), sqSize)
 
     def paintEvent(self, event):
         """Implements paintEvent() method. Draws squares and pieces on the board."""
@@ -128,43 +145,73 @@ class View(QWidget):
                     self.drawSquare(painter, file, rank)
         # Draw highlights
         self.drawHighlights(painter)
-        painter.fillRect(self.squareRect(12, 1), QColor('#40bf3b43'))
-        painter.fillRect(self.squareRect(1, 1), QColor('#404185bf'))
-        painter.fillRect(self.squareRect(1, 12), QColor('#40c09526'))
-        painter.fillRect(self.squareRect(12, 12), QColor('#404e9161'))
+        painter.fillRect(self.squareRect(12, 1, self.orientation[0]), QColor('#40bf3b43'))
+        painter.fillRect(self.squareRect(1, 1, self.orientation[0]), QColor('#404185bf'))
+        painter.fillRect(self.squareRect(1, 12, self.orientation[0]), QColor('#40c09526'))
+        painter.fillRect(self.squareRect(12, 12, self.orientation[0]), QColor('#404e9161'))
         # Draw pieces
         for rank in range(self.board.ranks):
             for file in range(self.board.files):
                 if not self.maskedSquare == QPoint(file, rank):  # When dragging a piece, don't paint it
                     self.drawPiece(painter, file, rank)
         # Draw coordinates
-        for rank in range(self.board.ranks):
-            file = 0 if 2 < rank < 11 else 3
-            square = self.squareRect(file, rank)
+        for y in range(14):
+            x = 0 if 2 < y < 11 else 3
+            square = self.squareRect(x, y)
             square.moveTopLeft(QPoint(square.x() + 1, square.y() + 1))
             square = QRectF(square)  # Only works with QRectF, so convert
-            color = self.palette().color(QPalette.Light) if not (file + rank) % 2 \
+            if self.orientation[0] == 'b':
+                file = self.board.files - (y + 1)
+                rank = self.board.ranks - (x + 1)
+            elif self.orientation[0] == 'y':
+                file = self.board.files - (x + 1)
+                rank = y
+            elif self.orientation[0] == 'g':
+                file = y
+                rank = x
+            else:  # red by default
+                file = x
+                rank = self.board.ranks - (y + 1)
+            color = self.palette().color(QPalette.Light) if (file + rank) % 2 \
                 else self.palette().color(QPalette.Dark)
             font = QFont('Trebuchet MS', 10, QFont.Bold)
             painter.setPen(color)
             painter.setFont(font)
-            painter.drawText(square, str(rank + 1))
-        for file in range(self.board.files):
-            rank = 0 if 2 < file < 11 else 3
-            square = self.squareRect(file, rank)
+            if self.orientation[0] in 'ry':
+                painter.drawText(square, str(self.board.ranks - rank))
+            else:
+                painter.drawText(square, chr(self.board.files - (file + 1) + 97))
+        for x in range(14):
+            y = 0 if 2 < x < 11 else 3
+            square = self.squareRect(x, y)
             square.moveTopLeft(QPoint(square.x() - 1, square.y() - 1))
             square = QRectF(square)  # Only works with QRectF, so convert
-            color = self.palette().color(QPalette.Light) if not (file + rank) % 2 \
+            if self.orientation[0] == 'b':
+                file = self.board.files - (y + 1)
+                rank = self.board.ranks - (x + 1)
+            elif self.orientation[0] == 'y':
+                file = self.board.files - (x + 1)
+                rank = y
+            elif self.orientation[0] == 'g':
+                file = y
+                rank = x
+            else:  # red by default
+                file = x
+                rank = self.board.ranks - (y + 1)
+            color = self.palette().color(QPalette.Light) if (file + rank) % 2 \
                 else self.palette().color(QPalette.Dark)
             font = QFont('Trebuchet MS', 10, QFont.Bold)
             painter.setPen(color)
             painter.setFont(font)
-            painter.drawText(square, Qt.AlignBottom | Qt.AlignRight, chr(file + 97))
+            if self.orientation[0] in 'ry':
+                painter.drawText(square, Qt.AlignBottom | Qt.AlignRight, chr(file + 97))
+            else:
+                painter.drawText(square, Qt.AlignBottom | Qt.AlignRight, str(rank + 1))
         painter.end()
 
     def drawSquare(self, painter, file, rank):
         """Draws dark or light square at position (file, rank) using painter."""
-        rect = self.squareRect(file, rank)
+        rect = self.squareRect(file, rank, self.orientation[0])
         fillColor = self.palette().color(QPalette.Midlight) if (file + rank) % 2 else self.palette().color(QPalette.Mid)
         painter.fillRect(rect, fillColor)
 
@@ -179,25 +226,32 @@ class View(QWidget):
 
     def drawPiece(self, painter, file, rank):
         """Draws piece at square (file, rank) using painter."""
-        rect = self.squareRect(file, rank)
+        rect = self.squareRect(file, rank, self.orientation[0])
         char = self.board.getData(file, rank)
         if char != ' ':
             icon = self.piece(char)
             if not icon.isNull():
                 icon.paint(painter, rect, Qt.AlignCenter)
 
-    def squareAt(self, point):
+    def squareAt(self, point, orientation=None):
         """Returns square (file, rank) of type QPoint that contains point."""
         sqSize = self.squareSize
-        file = point.x() / sqSize.width()
-        rank = point.y() / sqSize.height()
-        if (file < 0) or (file > self.board.files) or (rank < 0) or (rank > self.board.ranks):
+        x = point.x() // sqSize.width()
+        y = point.y() // sqSize.height()
+        if (x < 0) or (x > 13) or (y < 0) or (y > 13):
             return QPoint()
-        return QPoint(file, self.board.ranks - rank)
+        elif orientation == 'b':
+            return QPoint(self.board.files - (y + 1), self.board.ranks - (x + 1))
+        elif orientation == 'y':
+            return QPoint(self.board.files - (x + 1), y)
+        elif orientation == 'g':
+            return QPoint(y, x)
+        else:  # red by default
+            return QPoint(x, self.board.ranks - (y + 1))
 
     def mouseReleaseEvent(self, event):
         """Implements mouseReleaseEvent() method. Emits signal with clicked square of type QPoint as value."""
-        point = self.squareAt(event.pos())
+        point = self.squareAt(event.pos(), self.orientation[0])
         if not self.mouseButton == Qt.LeftButton:
             return
         if point.isNull():
@@ -207,7 +261,7 @@ class View(QWidget):
     def mousePressEvent(self, event):
         """Implements mousePressEvent() method. Records drag start position, origin square and mouse button."""
         self.dragStart = event.pos()
-        self.clickedSquare = self.squareAt(event.pos())
+        self.clickedSquare = self.squareAt(event.pos(), self.orientation[0])
         self.mouseButton = event.buttons()
 
     def mouseMoveEvent(self, event):
@@ -225,11 +279,12 @@ class View(QWidget):
             icon = self.piece(char)
             if icon.isNull():
                 return
-            iconPosition = self.squareRect(self.clickedSquare.x(), self.clickedSquare.y()).topLeft()
+            iconPosition = self.squareRect(self.clickedSquare.x(), self.clickedSquare.y(),
+                                           self.orientation[0]).topLeft()
             offset = QPoint(event.pos() - iconPosition)
             # Pixmap shown under cursor while dragging
             dpr = 2  # device pixel ratio
-            pixmap = icon.pixmap(QSize(50 * dpr, 50 * dpr))
+            pixmap = icon.pixmap(QSize(self.squareSize.width() * dpr, self.squareSize.height() * dpr))
             pixmap.setDevicePixelRatio(dpr)
             # Serialize drag-drop data into QByteArray
             data = QByteArray()
@@ -242,7 +297,7 @@ class View(QWidget):
             drag = QDrag(self)
             drag.setMimeData(mimeData)
             drag.setPixmap(pixmap)
-            drag.setHotSpot(event.pos() - iconPosition)
+            drag.setHotSpot(QPoint(self.squareSize.width() / 2, self.squareSize.height() / 2))
             self.maskedSquare = self.clickedSquare
             self.dragStarted.emit(self.clickedSquare)
             drag.exec_()
@@ -280,7 +335,7 @@ class View(QWidget):
             offset = QPoint()
             dataStream >> icon >> offset
             # Send signal to make the move
-            square = self.squareAt(event.pos())
+            square = self.squareAt(event.pos(), self.orientation[0])
             self.pieceMoved.emit(self.clickedSquare, square)
             if event.source() == self:
                 event.setDropAction(Qt.MoveAction)
@@ -315,7 +370,7 @@ class View(QWidget):
         """Draws all recognized highlights stored in the list."""
         for highlight in self.highlights:
             if highlight.Type == self.SquareHighlight.Type:
-                rect = self.squareRect(highlight.file, highlight.rank)
+                rect = self.squareRect(highlight.file, highlight.rank, self.orientation[0])
                 painter.fillRect(rect, highlight.color)
 
     def highlightPlayer(self, player):
@@ -434,6 +489,45 @@ class View(QWidget):
         self.greenNameEdit.setHidden(True)
         self.greenNameEdit.returnPressed.connect(lambda: self.setPlayerName(self.greenName))
         self.greenNameEdit.focusOut.connect(lambda: self.setPlayerName(self.greenName))
+
+    def movePlayerLabels(self, orientation):
+        """Moves player labels when board orientation is changed."""
+        if orientation == 'b':
+            self.redName.move(550, 0)
+            self.redNameEdit.move(550, 0)
+            self.blueName.move(550, 650)
+            self.blueNameEdit.move(550, 650)
+            self.yellowName.move(0, 650)
+            self.yellowNameEdit.move(0, 650)
+            self.greenName.move(0, 0)
+            self.greenNameEdit.move(0, 0)
+        elif orientation == 'y':
+            self.redName.move(0, 0)
+            self.redNameEdit.move(0, 0)
+            self.blueName.move(550, 0)
+            self.blueNameEdit.move(550, 0)
+            self.yellowName.move(550, 650)
+            self.yellowNameEdit.move(550, 650)
+            self.greenName.move(0, 650)
+            self.greenNameEdit.move(0, 650)
+        elif orientation == 'g':
+            self.redName.move(0, 650)
+            self.redNameEdit.move(0, 650)
+            self.blueName.move(0, 0)
+            self.blueNameEdit.move(0, 0)
+            self.yellowName.move(550, 0)
+            self.yellowNameEdit.move(550, 0)
+            self.greenName.move(550, 650)
+            self.greenNameEdit.move(550, 650)
+        else:  # red by default
+            self.redName.move(550, 650)
+            self.redNameEdit.move(550, 650)
+            self.blueName.move(0, 650)
+            self.blueNameEdit.move(0, 650)
+            self.yellowName.move(0, 0)
+            self.yellowNameEdit.move(0, 0)
+            self.greenName.move(550, 0)
+            self.greenNameEdit.move(550, 0)
 
     def editPlayerName(self, nameEdit):
         """Activates player name edit field."""

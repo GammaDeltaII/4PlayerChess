@@ -251,10 +251,12 @@ class Algorithm(QObject):
     def strMove(self, fromFile, fromRank, toFile, toRank):
         """Returns move in string form, separated by spaces, i.e. '<piece> <from> <captured piece> <to>'."""
         piece: str = self.board.getData(fromFile, fromRank)
-        target: str = self.board.getData(toFile, toRank)
-        char = (piece + ' ' + chr(97 + fromFile) + str(fromRank + 1) + ' ' + target * (target != ' ') + ' ' +
+        captured: str = self.board.getData(toFile, toRank)
+        char = (piece + ' ' + chr(97 + fromFile) + str(fromRank + 1) + ' ' + captured * (captured != ' ') + ' ' +
                 chr(97 + toFile) + str(toRank + 1))  # chr(97) = 'a'
         return char
+
+    # TODO fix castling bug prevMove / nextMove
 
     def prevMove(self):
         """Sets board state to previous move."""
@@ -266,15 +268,14 @@ class Algorithm(QObject):
         fromFile = ord(moveString[1][0]) - 97  # chr(97) = 'a'
         fromRank = int(moveString[1][1:]) - 1
         if len(moveString) == 4:
-            target = moveString[2]
+            captured = moveString[2]
             toFile = ord(moveString[3][0]) - 97
             toRank = int(moveString[3][1:]) - 1
         else:
-            target = ' '
+            captured = ' '
             toFile = ord(moveString[2][0]) - 97
             toRank = int(moveString[2][1:]) - 1
-        self.board.setData(fromFile, fromRank, piece)
-        self.board.setData(toFile, toRank, target)
+        self.board.undoMove(fromFile, fromRank, toFile, toRank, piece, captured)
         self.currentMove = self.currentMove.parent
         self.moveNumber -= 1
         self.playerQueue.rotate(1)
@@ -305,7 +306,6 @@ class Algorithm(QObject):
             return
         moveString = self.currentMove.children[var].name
         moveString = moveString.split()
-        piece = moveString[0]
         fromFile = ord(moveString[1][0]) - 97  # chr(97) = 'a'
         fromRank = int(moveString[1][1:]) - 1
         if len(moveString) == 4:
@@ -314,8 +314,7 @@ class Algorithm(QObject):
         else:
             toFile = ord(moveString[2][0]) - 97
             toRank = int(moveString[2][1:]) - 1
-        self.board.setData(fromFile, fromRank, ' ')
-        self.board.setData(toFile, toRank, piece)
+        self.board.movePiece(fromFile, fromRank, toFile, toRank)
         self.currentMove = self.currentMove.children[var]
         self.moveNumber += 1
         # Signal View to add move highlight and remove highlights of next player

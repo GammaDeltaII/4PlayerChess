@@ -23,6 +23,13 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0).
 
 <!-- Types of changes: Added, Changed, Deprecated, Removed, Fixed -->
 
+
+## [0.4.0] - 12/08/2018
+### Added:
+- Rotate and flip board view
+- Bitboard position representation
+
+
 ## [0.3.0] - 14/07/2018
 ### Added:
 - Game annotations
@@ -51,6 +58,7 @@ Initial development release.
 
 
 <!-- Links to releases -->
+[0.4.0]: https://github.com/GammaDeltaII/4PlayerChess/releases/tag/0.4.0
 [0.3.0]: https://github.com/GammaDeltaII/4PlayerChess/releases/tag/0.3.0
 [0.2.0]: https://github.com/GammaDeltaII/4PlayerChess/releases/tag/0.2.0
 [0.1.0]: https://github.com/GammaDeltaII/4PlayerChess/releases/tag/0.1.0

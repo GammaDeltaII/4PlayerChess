@@ -900,9 +900,6 @@ color: grey;</string>
    </property>
   </action>
   <action name="actionRotate_Board_Left">
-   <property name="enabled">
-    <bool>false</bool>
-   </property>
    <property name="text">
     <string>Rotate Board Left</string>
    </property>
@@ -911,9 +908,6 @@ color: grey;</string>
    </property>
   </action>
   <action name="actionRotate_Board_Right">
-   <property name="enabled">
-    <bool>false</bool>
-   </property>
    <property name="text">
     <string>Rotate Board Right</string>
    </property>
@@ -922,9 +916,6 @@ color: grey;</string>
    </property>
   </action>
   <action name="actionFlip_Board">
-   <property name="enabled">
-    <bool>false</bool>
-   </property>
    <property name="text">
     <string>Flip Board</string>
    </property>
