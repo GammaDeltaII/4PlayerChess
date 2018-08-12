@@ -20,12 +20,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 <img src="resources/img/icon.png" width="100" height="100">
 
 # 4PlayerChess
-A basic GUI for Four-Player Chess to analyze lines. This project is a work in progress. Currently, it only supports the Teams variant. Free-For-All (FFA) may be added in the future.
+A Python/Qt application for Four-Player Chess Teams to perform self-analysis. This project is a work in progress.
 
-**Latest Release:** version [0.3.0](https://github.com/GammaDeltaII/4PlayerChess/releases/tag/0.3.0)
+**Latest Release:** version [0.4.0](https://github.com/GammaDeltaII/4PlayerChess/releases/tag/0.4.0)
 
 ## Features
-- Board with move, turn and piece highlighting
+- Rotatable board with move, turn and piece highlighting
 - Drag & drop or click to move pieces
 - Clickable move list with support for variations and annotations
 - Load and save games and set positions with FEN4 and PGN4
