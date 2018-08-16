@@ -903,6 +903,9 @@ color: grey;</string>
    <property name="text">
     <string>Rotate Board Left</string>
    </property>
+   <property name="statusTip">
+    <string>Rotate board counterclockwise</string>
+   </property>
    <property name="shortcut">
     <string>Ctrl+L</string>
    </property>
@@ -911,6 +914,9 @@ color: grey;</string>
    <property name="text">
     <string>Rotate Board Right</string>
    </property>
+   <property name="statusTip">
+    <string>Rotate board clockwise</string>
+   </property>
    <property name="shortcut">
     <string>Ctrl+R</string>
    </property>
@@ -918,6 +924,9 @@ color: grey;</string>
   <action name="actionFlip_Board">
    <property name="text">
     <string>Flip Board</string>
+   </property>
+   <property name="statusTip">
+    <string>Flip board</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+F</string>

@@ -24,6 +24,18 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0).
 <!-- Types of changes: Added, Changed, Deprecated, Removed, Fixed -->
 
 
+## [0.5.0] - 16/08/2018
+### Added:
+- Pseudo-legal move/attack generation using bitboards
+- Castling availability (also pseudo-legal)
+### Changed:
+- Moved (pseudo-)legality checks and handling of castling moves from algorithm to board (bitboard based)
+- Restricted cursor movement to board area while dragging pieces
+### Fixed:
+- Castling bug (prevMove / nextMove now moves king and rook back to correct squares)
+- Move selection bug (did not select move in move list if existing move played)
+
+
 ## [0.4.0] - 12/08/2018
 ### Added:
 - Rotate and flip board view
@@ -58,6 +70,7 @@ Initial development release.
 
 
 <!-- Links to releases -->
+[0.5.0]: https://github.com/GammaDeltaII/4PlayerChess/releases/tag/0.5.0
 [0.4.0]: https://github.com/GammaDeltaII/4PlayerChess/releases/tag/0.4.0
 [0.3.0]: https://github.com/GammaDeltaII/4PlayerChess/releases/tag/0.3.0
 [0.2.0]: https://github.com/GammaDeltaII/4PlayerChess/releases/tag/0.2.0

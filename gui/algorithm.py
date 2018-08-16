@@ -46,8 +46,7 @@ class Algorithm(QObject):
 
     startPosition = '3yRyNyByKyQyByNyR3/3yPyPyPyPyPyPyPyP3/14/bRbP10gPgR/bNbP10gPgN/bBbP10gPgB/bKbP10gPgQ/' \
                     'bQbP10gPgK/bBbP10gPgB/bNbP10gPgN/bRbP10gPgR/14/3rPrPrPrPrPrPrPrP3/3rRrNrBrQrKrBrNrR3 ' \
-                    'r - - 0 1'
-    # Castling rights: rKrQbKbQyKyQgKgQ (not implemented yet)
+                    'r rKrQbKbQyKyQgKgQ - 0 1'
 
     def __init__(self):
         super().__init__()
@@ -155,14 +154,27 @@ class Algorithm(QObject):
         fen4 = self.board.getFen4()
         # Append character for current player
         fen4 += self.currentPlayer + ' '
-        # TODO implement castling availability
-        fen4 += '- '  # "K" if kingside castling available, "Q" if queenside, "-" if no player can castle
+        fen4 += self.board.castlingAvailability() + ' '
         fen4 += '- '  # En passant target square, n/a
         fen4 += str(self.moveNumber) + ' '  # Number of quarter-moves
         fen4 += str(self.moveNumber // 4 + 1)  # Number of full moves, starting from 1
         if emitSignal:
             self.fen4Generated.emit(fen4)
         return fen4
+
+    def setCastlingAvailability(self, fen4):
+        """Sets castling availability according to FEN4."""
+        castling = fen4.split(' ')[2]
+        RED, BLUE, YELLOW, GREEN = range(4)
+        QUEENSIDE, KINGSIDE = (0, 1)
+        self.board.castle[RED][KINGSIDE] = (1 << self.square(10, 0)) if 'rK' in castling else 0
+        self.board.castle[RED][QUEENSIDE] = (1 << self.square(3, 0)) if 'rQ' in castling else 0
+        self.board.castle[BLUE][KINGSIDE] = (1 << self.square(0, 10)) if 'bK' in castling else 0
+        self.board.castle[BLUE][QUEENSIDE] = (1 << self.square(0, 3)) if 'bQ' in castling else 0
+        self.board.castle[YELLOW][KINGSIDE] = (1 << self.square(3, 13)) if 'yK' in castling else 0
+        self.board.castle[YELLOW][QUEENSIDE] = (1 << self.square(10, 13)) if 'yQ' in castling else 0
+        self.board.castle[GREEN][KINGSIDE] = (1 << self.square(13, 3)) if 'gK' in castling else 0
+        self.board.castle[GREEN][QUEENSIDE] = (1 << self.square(13, 10)) if 'gQ' in castling else 0
 
     def setBoardState(self, fen4):
         """Sets board according to FEN4."""
@@ -256,8 +268,6 @@ class Algorithm(QObject):
                 chr(97 + toFile) + str(toRank + 1))  # chr(97) = 'a'
         return char
 
-    # TODO fix castling bug prevMove / nextMove
-
     def prevMove(self):
         """Sets board state to previous move."""
         if self.currentMove.name == 'root':
@@ -314,7 +324,7 @@ class Algorithm(QObject):
         else:
             toFile = ord(moveString[2][0]) - 97
             toRank = int(moveString[2][1:]) - 1
-        self.board.movePiece(fromFile, fromRank, toFile, toRank)
+        self.board.makeMove(fromFile, fromRank, toFile, toRank)
         self.currentMove = self.currentMove.children[var]
         self.moveNumber += 1
         # Signal View to add move highlight and remove highlights of next player
@@ -624,31 +634,12 @@ class Teams(Algorithm):
         if self.currentPlayer == self.Green and fromData[0] != 'g':
             return False
 
-        # Check if move is within board
-        if toFile < 0 or toFile > (self.board.files - 1):
+        # TODO check if move is truly legal (checks / pins)
+        color = ['r', 'b', 'y', 'g'].index(fromData[0])
+        piece = ['P', 'N', 'B', 'R', 'Q', 'K'].index(fromData[1]) + 4
+        target = 1 << self.board.square(toFile, toRank)
+        if not target & self.board.legalMoves(piece, fromFile, fromRank, color):
             return False
-        if toRank < 0 or toRank > (self.board.ranks - 1):
-            return False
-        if ((toFile < 3 and toRank < 3) or (toFile < 3 and toRank > 10) or
-                (toFile > 10 and toRank < 3) or (toFile > 10 and toRank > 10)):
-            return False
-
-        # Check if target square is not occupied by friendly piece. (Castling move excluded.)
-        toData = self.board.getData(toFile, toRank)
-        if self.currentPlayer == self.Red and (toData[0] == 'r' or toData[0] == 'y'):
-            if not (fromData == 'rK' and toData == 'rR'):
-                return False
-        if self.currentPlayer == self.Blue and (toData[0] == 'b' or toData[0] == 'g'):
-            if not (fromData == 'bK' and toData == 'bR'):
-                return False
-        if self.currentPlayer == self.Yellow and (toData[0] == 'y' or toData[0] == 'r'):
-            if not (fromData == 'yK' and toData == 'yR'):
-                return False
-        if self.currentPlayer == self.Green and (toData[0] == 'g' or toData[0] == 'b'):
-            if not (fromData == 'gK' and toData == 'gR'):
-                return False
-
-        # TODO check if move is legal
 
         # Check if move already exists
         moveString = self.strMove(fromFile, fromRank, toFile, toRank)
@@ -664,37 +655,10 @@ class Teams(Algorithm):
             for child in self.currentMove.children:
                 if child.name == moveString:
                     self.currentMove = child
+                    self.updateMoveText()  # Make current move selected in move list
 
         # Make the move
-        if fromData[1] == 'K' and toData != ' ':
-            if toData[1] == 'R' and fromData[0] == toData[0]:
-                # Castling move
-                if fromRank == toRank:
-                    if abs(toFile - fromFile) == 3:  # Kingside
-                        kingFile = toFile - 1 if toFile > fromFile else toFile + 1
-                        rookFile = fromFile + 1 if toFile > fromFile else fromFile - 1
-                        self.board.movePiece(fromFile, fromRank, kingFile, toRank)
-                        self.board.movePiece(toFile, fromRank, rookFile, toRank)
-                    elif abs(toFile - fromFile) == 4:  # Queenside
-                        kingFile = toFile + 2 if toFile < fromFile else toFile - 2
-                        rookFile = fromFile - 1 if toFile < fromFile else fromFile + 1
-                        self.board.movePiece(fromFile, fromRank, kingFile, toRank)
-                        self.board.movePiece(toFile, fromRank, rookFile, toRank)
-                elif fromFile == toFile:
-                    if abs(toRank - fromRank) == 3:  # Kingside
-                        kingRank = toRank - 1 if toRank > fromRank else toRank + 1
-                        rookRank = fromRank + 1 if toRank > fromRank else fromRank - 1
-                        self.board.movePiece(fromFile, fromRank, toFile, kingRank)
-                        self.board.movePiece(fromFile, toRank, toFile, rookRank)
-                    elif abs(toRank - fromRank) == 4:  # Queenside
-                        kingRank = toRank + 2 if toRank < fromRank else toRank - 2
-                        rookRank = fromRank - 1 if toRank < fromRank else fromRank + 1
-                        self.board.movePiece(fromFile, fromRank, toFile, kingRank)
-                        self.board.movePiece(fromFile, toRank, toFile, rookRank)
-            else:
-                self.board.movePiece(fromFile, fromRank, toFile, toRank)
-        else:
-            self.board.movePiece(fromFile, fromRank, toFile, toRank)
+        self.board.makeMove(fromFile, fromRank, toFile, toRank)
 
         # Increment move number
         self.moveNumber += 1

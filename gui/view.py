@@ -21,7 +21,7 @@
 from PyQt5.QtWidgets import QWidget, QPushButton, QLineEdit, QPlainTextEdit, QFrame
 from PyQt5.QtCore import Qt, QSize, QRect, QRectF, QPoint, pyqtSignal, QEvent, QByteArray, QDataStream, QIODevice, \
     QMimeData
-from PyQt5.QtGui import QPainter, QPalette, QColor, QFont, QDrag, QIcon
+from PyQt5.QtGui import QPainter, QPalette, QColor, QFont, QDrag, QIcon, QCursor
 from collections import deque
 from gui.board import Board
 
@@ -324,6 +324,19 @@ class View(QWidget):
                 event.ignore()
         else:
             event.ignore()
+
+    def dragLeaveEvent(self, event):
+        """Implements dragLeaveEvent() method."""
+        # Keep cursor on the board while dragging
+        cursor = QCursor()
+        position = cursor.pos()
+        topLeft = self.mapToGlobal(self.geometry().topLeft()) - self.geometry().topLeft()
+        bottomRight = self.mapToGlobal(self.geometry().bottomRight()) - self.geometry().topLeft()
+        bound = lambda x, l, u: l if x < l else u if x > u else x
+        x = bound(position.x(), topLeft.x() + 1, bottomRight.x() - 1)
+        y = bound(position.y(), topLeft.y() + 1, bottomRight.y() - 1)
+        if x != position.x() or y != position.y():
+            cursor.setPos(x, y)
 
     def dropEvent(self, event):
         """Implements dropEvent() method. Handles drop action."""
