@@ -22,7 +22,7 @@ C = pyuic5
 FLAGS = --from-imports
 
 # Target files
-TARGET := mainwindow.py
+TARGET := mainwindow.py settings.py about.py
 
 # For all target files
 all: $(TARGET)

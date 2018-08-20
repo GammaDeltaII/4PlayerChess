@@ -23,6 +23,17 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0).
 
 <!-- Types of changes: Added, Changed, Deprecated, Removed, Fixed -->
 
+## [0.6.0] - 20/08/2018
+### Added:
+- Option to remove moves from the move list (right-click context menu)
+- Check if player is in check and highlight king square red if so
+- Draw arrows (right-click drag) and highlight squares (right-click). Drawing same arrow or square highlight again removes arrow or square highlight. Left-clicking any empty square removes all arrows and highlighted squares.
+- Set and save preferences (show coordinates, show names, auto-rotate board)
+- Check for updates (compares version to latest GitHub release)
+
+### Changed:
+- Cleaned up code About dialog (now class based on .ui file)
+
 
 ## [0.5.0] - 16/08/2018
 ### Added:
@@ -70,6 +81,7 @@ Initial development release.
 
 
 <!-- Links to releases -->
+[0.6.0]: https://github.com/GammaDeltaII/4PlayerChess/releases/tag/0.6.0
 [0.5.0]: https://github.com/GammaDeltaII/4PlayerChess/releases/tag/0.5.0
 [0.4.0]: https://github.com/GammaDeltaII/4PlayerChess/releases/tag/0.4.0
 [0.3.0]: https://github.com/GammaDeltaII/4PlayerChess/releases/tag/0.3.0

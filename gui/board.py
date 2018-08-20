@@ -44,6 +44,7 @@ class Board(QObject):
     """The Board is the actual chess board and is the data structure shared between the View and the Algorithm."""
     boardReset = pyqtSignal()
     dataChanged = pyqtSignal(int, int)
+    autoRotate = pyqtSignal(int)
 
     def __init__(self, files, ranks):
         super().__init__()
@@ -67,6 +68,10 @@ class Board(QObject):
     def square256(self, file, rank):
         """Little-Endian Rank-File (LERF) mapping for 16x16 bitboard."""
         return rank << 4 | file
+
+    def fileRank(self, square):
+        """Returns file and rank of square."""
+        return (square & 15) - 1, (square >> 4) - 1
 
     def bitScanForward(self, bitboard):
         """Finds the index of the least significant 1 bit (LS1B) using De Bruijn sequence multiplication."""
@@ -299,7 +304,7 @@ class Board(QObject):
         else:
             return -1
 
-    def pawnMoves(self, origin, color):
+    def pawnMoves(self, origin, color, attacksOnly=False):
         """Pseudo-legal pawn moves."""
         rank4 = 0x00000000000000000000000000000000000000000000ffff0000000000000000
         rank11 = 0x0000000000000000ffff00000000000000000000000000000000000000000000
@@ -328,7 +333,10 @@ class Board(QObject):
             captures = attacks & (self.pieceBB[RED] | self.pieceBB[YELLOW])
         else:
             return 0
-        return (singlePush | doublePush | captures) & boardMask
+        if attacksOnly:  # only return attacked squares
+            return attacks & boardMask
+        else:
+            return (singlePush | doublePush | captures) & boardMask
 
     def knightMoves(self, origin):
         """Pseudo-legal knight moves."""
@@ -362,6 +370,54 @@ class Board(QObject):
         kingSet |= moves
         moves |= self.shiftN(kingSet) | self.shiftS(kingSet)
         return moves & boardMask
+
+    def attackers(self, square):
+        """Returns the set of all pieces attacking and defending the target square."""
+        attackers = self.pawnMoves(square, RED, True) & self.pieceSet(YELLOW, PAWN)
+        attackers |= self.pawnMoves(square, YELLOW, True) & self.pieceSet(RED, PAWN)
+        attackers |= self.pawnMoves(square, BLUE, True) & self.pieceSet(GREEN, PAWN)
+        attackers |= self.pawnMoves(square, GREEN, True) & self.pieceSet(BLUE, PAWN)
+        attackers |= self.knightMoves(square) & self.pieceBB[KNIGHT]
+        attackers |= self.kingMoves(square) & self.pieceBB[KING]
+        bishopMoves = self.maskBlockedSquares(self.bishopMoves(square), square)
+        attackers |= bishopMoves & (self.pieceBB[BISHOP] | self.pieceBB[QUEEN])
+        rookMoves = self.maskBlockedSquares(self.rookMoves(square), square)
+        attackers |= rookMoves & (self.pieceBB[ROOK] | self.pieceBB[QUEEN])
+        return attackers
+
+    def attacked(self, square, color):
+        """Checks if a square is attacked by a player."""
+        if color == RED:
+            opposite = YELLOW
+        elif color == YELLOW:
+            opposite = RED
+        elif color == BLUE:
+            opposite = GREEN
+        elif color == GREEN:
+            opposite = BLUE
+        else:
+            return False
+        if self.pawnMoves(square, opposite, True) & self.pieceSet(color, PAWN):
+            return True
+        if self.knightMoves(square) & self.pieceSet(color, KNIGHT):
+            return True
+        if self.kingMoves(square) & self.pieceSet(color, KING):
+            return True
+        bishopMoves = self.maskBlockedSquares(self.bishopMoves(square), square)
+        if bishopMoves & (self.pieceSet(color, BISHOP) | self.pieceSet(color, QUEEN)):
+            return True
+        rookMoves = self.maskBlockedSquares(self.rookMoves(square), square)
+        if rookMoves & (self.pieceSet(color, ROOK) | self.pieceSet(color, QUEEN)):
+            return True
+        return False
+
+    def kingInCheck(self, color):
+        """Checks if a player's king is in check."""
+        kingSquare = self.bitScanForward(self.pieceSet(color, KING))
+        if color in (RED, YELLOW):
+            return self.attacked(kingSquare, BLUE) or self.attacked(kingSquare, GREEN), self.fileRank(kingSquare)
+        else:
+            return self.attacked(kingSquare, RED) or self.attacked(kingSquare, YELLOW), self.fileRank(kingSquare)
 
     def printBB(self, bitboard):
         """Prints 14x14 bitboard in easily readable format (for debugging)."""
@@ -574,6 +630,8 @@ class Board(QObject):
             self.pieceBB[piece_] ^= toBB
             self.occupiedBB ^= toBB
             self.emptyBB ^= toBB
+        # Emit signal for board view auto-rotation
+        self.autoRotate.emit(-1)
 
     def undoMove(self, fromFile, fromRank, toFile, toRank, char, captured):
         """Takes back move and restores captured piece."""
@@ -643,6 +701,8 @@ class Board(QObject):
             self.pieceBB[piece_] ^= fromBB
             self.occupiedBB ^= fromBB
             self.emptyBB ^= fromBB
+        # Emit signal for board view auto-rotation
+        self.autoRotate.emit(1)
 
     def castlingAvailability(self):
         """Returns castling availability string."""

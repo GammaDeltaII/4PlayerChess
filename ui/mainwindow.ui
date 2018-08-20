@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>mainWindow</class>
- <widget class="QMainWindow" name="mainWindow">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -863,7 +863,7 @@ color: grey;</string>
     <string>Save game to PGN4 file</string>
    </property>
    <property name="shortcut">
-    <string>Ctrl+Shift+S</string>
+    <string>Ctrl+S</string>
    </property>
   </action>
   <action name="actionQuit">
@@ -952,9 +952,6 @@ color: grey;</string>
    </property>
   </action>
   <action name="actionPreferences">
-   <property name="enabled">
-    <bool>false</bool>
-   </property>
    <property name="text">
     <string>Preferences...</string>
    </property>
@@ -963,11 +960,8 @@ color: grey;</string>
    </property>
   </action>
   <action name="actionCheck_for_Updates">
-   <property name="enabled">
-    <bool>false</bool>
-   </property>
    <property name="text">
-    <string>Check for Updates</string>
+    <string>Check for Updates...</string>
    </property>
    <property name="statusTip">
     <string>Check if updates are available</string>
