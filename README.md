@@ -22,7 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 # 4PlayerChess
 A Python/Qt application for Four-Player Chess Teams to perform analysis. This project is a work in progress.
 
-**Latest Release:** version [0.6.0](https://github.com/GammaDeltaII/4PlayerChess/releases/latest)
+**Latest Release:** version [0.6.1](https://github.com/GammaDeltaII/4PlayerChess/releases/latest)
 
 You can check for updates from the application menu (*4PlayerChess > Check for Updates...*). (In case of an *SSL* error, make sure `certifi` is installed: `pip3 install certifi`.)
 

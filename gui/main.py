@@ -40,7 +40,7 @@ SETTINGS = QSettings(COM, APP)
 # Semantic versioning: N.N.N-{alpha|beta|rc}.N
 MAJOR = str(0)
 MINOR = str(6)
-PATCH = str(0)
+PATCH = str(1)
 PRE_RELEASE = False * ('-' + 'alpha' + str(1))  # alpha, beta or rc (= release candidate)
 VERSION = MAJOR + '.' + MINOR + '.' + PATCH + PRE_RELEASE
 

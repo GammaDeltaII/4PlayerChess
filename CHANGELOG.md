@@ -23,6 +23,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0).
 
 <!-- Types of changes: Added, Changed, Deprecated, Removed, Fixed -->
 
+## [0.6.1] - 23/08/2018
+### Fixed:
+- Bug that caused a crash when making a move
+
+
 ## [0.6.0] - 20/08/2018
 ### Added:
 - Option to remove moves from the move list (right-click context menu)
@@ -81,6 +86,7 @@ Initial development release.
 
 
 <!-- Links to releases -->
+[0.6.1]: https://github.com/GammaDeltaII/4PlayerChess/releases/tag/0.6.1
 [0.6.0]: https://github.com/GammaDeltaII/4PlayerChess/releases/tag/0.6.0
 [0.5.0]: https://github.com/GammaDeltaII/4PlayerChess/releases/tag/0.5.0
 [0.4.0]: https://github.com/GammaDeltaII/4PlayerChess/releases/tag/0.4.0
