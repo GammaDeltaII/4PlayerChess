@@ -448,7 +448,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.setFocusPolicy(Qt.NoFocus)
                 self.setContextMenuPolicy(Qt.CustomContextMenu)
                 self.customContextMenuRequested.connect(self.showContextMenu)
-                self.actionDelete = QAction()
+                self.actionDelete = QAction(None)
                 self.actionDelete.setObjectName("actionDelete")
                 self.actionDelete.setText('Delete move')
                 self.actionDelete.triggered.connect(self.deleteMove)
