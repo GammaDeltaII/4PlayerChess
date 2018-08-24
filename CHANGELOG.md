@@ -23,7 +23,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0).
 
 <!-- Types of changes: Added, Changed, Deprecated, Removed, Fixed -->
 
-## [0.7.0] - ??/08/2018
+## [0.7.0] - 24/08/2018
 ### Added:
 - Promote variation (right-click context menu)
 - Different color arrows and square highlights (hold num key 0, 1, 2, 3 or 4 while dragging or clicking) and option to change color with board orientation
