@@ -22,14 +22,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 # 4PlayerChess
 A Python/Qt application for Four-Player Chess Teams to perform analysis. This project is a work in progress.
 
-**Latest Release:** version [0.6.1](https://github.com/GammaDeltaII/4PlayerChess/releases/latest)
+**Latest Release:** version [0.7.0](https://github.com/GammaDeltaII/4PlayerChess/releases/latest)
 
 You can check for updates from the application menu (*4PlayerChess > Check for Updates...*). (In case of an *SSL* error, make sure `certifi` is installed: `pip3 install certifi`.)
 
 ## Features
 - Rotatable board with move, turn and piece highlighting
 - Drag & drop or click to move pieces
-- Right-click (drag) to draw arrows and highlight squares
+- Right-click to draw arrows (drag) and highlight squares
 - Pseudo-legal move generation and castling availability
 - Clickable move list with support for variations and annotations
 - Load and save games and set positions with FEN4 and PGN4

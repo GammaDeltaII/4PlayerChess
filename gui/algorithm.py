@@ -364,6 +364,7 @@ class Algorithm(QObject):
 
     def lastMove(self):
         """Sets board state to last move."""
+        self.firstMove()
         while self.currentMove.children:
             self.nextMove()
 

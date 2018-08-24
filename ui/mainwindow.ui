@@ -827,10 +827,18 @@ color: rgb(0, 0, 0);</string>
     <addaction name="separator"/>
     <addaction name="actionQuit"/>
    </widget>
+   <widget class="QMenu" name="menuHelp">
+    <property name="title">
+     <string>Help</string>
+    </property>
+    <addaction name="actionQuick_Reference"/>
+    <addaction name="actionReport_Bug"/>
+   </widget>
    <addaction name="menu4PlayerChess"/>
    <addaction name="menuFile"/>
    <addaction name="menuEdit"/>
    <addaction name="menuView"/>
+   <addaction name="menuHelp"/>
   </widget>
   <widget class="QStatusBar" name="statusbar">
    <property name="styleSheet">
@@ -904,7 +912,7 @@ color: grey;</string>
     <string>Rotate Board Left</string>
    </property>
    <property name="statusTip">
-    <string>Rotate board counterclockwise</string>
+    <string>Rotate board counterclockwise (next player)</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+L</string>
@@ -915,7 +923,7 @@ color: grey;</string>
     <string>Rotate Board Right</string>
    </property>
    <property name="statusTip">
-    <string>Rotate board clockwise</string>
+    <string>Rotate board clockwise (previous player)</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+R</string>
@@ -943,14 +951,6 @@ color: grey;</string>
     <string>Ctrl+N</string>
    </property>
   </action>
-  <action name="actionAbout">
-   <property name="text">
-    <string>About 4PlayerChess</string>
-   </property>
-   <property name="statusTip">
-    <string>Application info</string>
-   </property>
-  </action>
   <action name="actionPreferences">
    <property name="text">
     <string>Preferences...</string>
@@ -965,6 +965,30 @@ color: grey;</string>
    </property>
    <property name="statusTip">
     <string>Check if updates are available</string>
+   </property>
+  </action>
+  <action name="actionAbout">
+   <property name="text">
+    <string>About 4PlayerChess</string>
+   </property>
+   <property name="statusTip">
+    <string>Application info</string>
+   </property>
+  </action>
+  <action name="actionQuick_Reference">
+   <property name="text">
+    <string>Quick Reference Guide</string>
+   </property>
+   <property name="statusTip">
+    <string>Overview of application features and shortcuts</string>
+   </property>
+  </action>
+  <action name="actionReport_Bug">
+   <property name="text">
+    <string>Report Bug or Request Feature...</string>
+   </property>
+   <property name="statusTip">
+    <string>Open GitHub issues page in browser to report a bug or request a feature</string>
    </property>
   </action>
  </widget>

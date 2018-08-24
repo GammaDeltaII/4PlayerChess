@@ -55,20 +55,20 @@ QPushButton:pressed {
     <rect>
      <x>10</x>
      <y>20</y>
-     <width>171</width>
-     <height>111</height>
+     <width>371</width>
+     <height>131</height>
     </rect>
    </property>
    <property name="title">
     <string>Board</string>
    </property>
-   <widget class="QWidget" name="">
+   <widget class="QWidget" name="layoutWidget">
     <property name="geometry">
      <rect>
       <x>20</x>
       <y>30</y>
-      <width>143</width>
-      <height>62</height>
+      <width>378</width>
+      <height>103</height>
      </rect>
     </property>
     <layout class="QVBoxLayout" name="verticalLayout">
@@ -83,6 +83,13 @@ QPushButton:pressed {
       <widget class="QCheckBox" name="shownames">
        <property name="text">
         <string>Show player names</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QCheckBox" name="autocolor">
+       <property name="text">
+        <string>Auto-change arrow color</string>
        </property>
       </widget>
      </item>

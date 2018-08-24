@@ -23,6 +23,18 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0).
 
 <!-- Types of changes: Added, Changed, Deprecated, Removed, Fixed -->
 
+## [0.7.0] - ??/08/2018
+### Added:
+- Promote variation (right-click context menu)
+- Different color arrows and square highlights (hold num key 0, 1, 2, 3 or 4 while dragging or clicking) and option to change color with board orientation
+- Help menu with quick reference guide and link to GitHub issues to report bugs or request features
+### Changed:
+- Changed lastMove() to go to last move of main line instead of variation
+- Changed About class to generic InfoDialog class to use for different dialogs
+### Fixed:
+- Bug that allowed drawing arrows and square highlights outside board (in 3x3 corners)
+
+
 ## [0.6.1] - 23/08/2018
 ### Fixed:
 - Bug that caused a crash when making a move
@@ -86,6 +98,7 @@ Initial development release.
 
 
 <!-- Links to releases -->
+[0.7.0]: https://github.com/GammaDeltaII/4PlayerChess/releases/tag/0.7.0
 [0.6.1]: https://github.com/GammaDeltaII/4PlayerChess/releases/tag/0.6.1
 [0.6.0]: https://github.com/GammaDeltaII/4PlayerChess/releases/tag/0.6.0
 [0.5.0]: https://github.com/GammaDeltaII/4PlayerChess/releases/tag/0.5.0

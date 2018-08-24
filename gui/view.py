@@ -21,7 +21,8 @@
 from PyQt5.QtWidgets import QWidget, QPushButton, QLineEdit, QPlainTextEdit, QFrame
 from PyQt5.QtCore import Qt, QSize, QRect, QRectF, QPoint, pyqtSignal, QEvent, QByteArray, QDataStream, QIODevice, \
     QMimeData, QLineF, QSettings
-from PyQt5.QtGui import QPainter, QPalette, QColor, QFont, QDrag, QIcon, QCursor, QPolygonF, QPainterPath, QPen, QBrush
+from PyQt5.QtGui import QPainter, QPalette, QColor, QFont, QDrag, QIcon, QCursor, QPolygonF, QPainterPath, QPen, \
+    QBrush, QGuiApplication
 from collections import deque
 from gui.board import Board
 
@@ -69,8 +70,11 @@ class View(QWidget):
         self.currentPlayer = None
         # Board orientation
         self.orientation = deque(['r', 'b', 'y', 'g'])
-        # Arrow origin square
+        # Arrows and square highlight
         self.arrowStart = None
+        self.keyModifier = None
+        self.arrowColor = None
+        self.squareColor = None
 
     class SquareHighlight:
         """A square highlight."""
@@ -294,13 +298,45 @@ class View(QWidget):
         point = self.squareAt(event.pos(), self.orientation[0])
         arrowEnd = self.squareAt(event.pos())
         if self.mouseButton == Qt.RightButton:
+            if self.keyModifier == Qt.Key_1:
+                self.arrowColor = QColor('#ab272f')
+                self.squareColor = QColor('#80ab272f')
+            elif self.keyModifier == Qt.Key_2:
+                self.arrowColor = QColor('#2d71ab')
+                self.squareColor = QColor('#802d71ab')
+            elif self.keyModifier == Qt.Key_3:
+                self.arrowColor = QColor('#ac8112')
+                self.squareColor = QColor('#80ac8112')
+            elif self.keyModifier == Qt.Key_4:
+                self.arrowColor = QColor('#3a7d4d')
+                self.squareColor = QColor('#803a7d4d')
+            elif self.keyModifier == Qt.Key_0:
+                self.arrowColor = QColor('#ff8c00')
+                self.squareColor = QColor('#80ff8c00')
+            else:
+                if SETTINGS.value('autocolor'):
+                    if self.orientation[0] == 'r':
+                        self.arrowColor = QColor('#ab272f')
+                        self.squareColor = QColor('#80ab272f')
+                    elif self.orientation[0] == 'b':
+                        self.arrowColor = QColor('#2d71ab')
+                        self.squareColor = QColor('#802d71ab')
+                    elif self.orientation[0] == 'y':
+                        self.arrowColor = QColor('#ac8112')
+                        self.squareColor = QColor('#80ac8112')
+                    elif self.orientation[0] == 'g':
+                        self.arrowColor = QColor('#3a7d4d')
+                        self.squareColor = QColor('#803a7d4d')
+                else:
+                    self.arrowColor = QColor('#ff8c00')
+                    self.squareColor = QColor('#80ff8c00')
             origin = self.squareCenter(self.arrowStart)
             target = self.squareCenter(arrowEnd)
             if origin == target:
                 sq = self.squareAt(origin)
                 file = sq.x()
                 rank = sq.y()
-                color = QColor('#80ff8c00')
+                color = self.squareColor
                 square = self.SquareHighlight(file, rank, color)
                 # If already exists, remove existing
                 removed = 0
@@ -310,9 +346,12 @@ class View(QWidget):
                         self.removeHighlight(highlight)
                         removed += 1
                 if not removed:
-                    self.addHighlight(square)
+                    # Do not allow drawing outside board
+                    if not ((file < 3 and rank < 3) or (file < 3 and rank > 10) or
+                            (file > 10 and rank < 3) or (file > 10 and rank > 10)):
+                        self.addHighlight(square)
             else:
-                color = QColor('#ff8c00')
+                color = self.arrowColor
                 arrow = self.Arrow(origin, target, color)
                 # If already exists, remove existing
                 removed = 0
@@ -322,7 +361,18 @@ class View(QWidget):
                         self.removeHighlight(highlight)
                         removed += 1
                 if not removed:
-                    self.addHighlight(arrow)
+                    # Do not allow drawing outside board
+                    fromSquare = self.squareAt(origin)
+                    toSquare = self.squareAt(target)
+                    fromFile = fromSquare.x()
+                    fromRank = fromSquare.y()
+                    toFile = toSquare.x()
+                    toRank = toSquare.y()
+                    if not ((fromFile < 3 and fromRank < 3) or (fromFile < 3 and fromRank > 10) or
+                            (fromFile > 10 and fromRank < 3) or (fromFile > 10 and fromRank > 10)) and not \
+                            ((toFile < 3 and toRank < 3) or (toFile < 3 and toRank > 10) or
+                             (toFile > 10 and toRank < 3) or (toFile > 10 and toRank > 10)):
+                        self.addHighlight(arrow)
             return
         elif self.mouseButton == Qt.LeftButton:
             if point.isNull():
@@ -340,7 +390,18 @@ class View(QWidget):
         # If empty square clicked with left mouse button, remove arrows
         if event.buttons() == Qt.LeftButton and \
                 self.board.getData(self.clickedSquare.x(), self.clickedSquare.y()) == ' ':
-            self.removeArrows()
+            if self.keyModifier == Qt.Key_1:
+                self.removeArrows([QColor('#80ab272f'), QColor('#ab272f')])
+            elif self.keyModifier == Qt.Key_2:
+                self.removeArrows([QColor('#802d71ab'), QColor('#2d71ab')])
+            elif self.keyModifier == Qt.Key_3:
+                self.removeArrows([QColor('#80ac8112'), QColor('#ac8112')])
+            elif self.keyModifier == Qt.Key_4:
+                self.removeArrows([QColor('#803a7d4d'), QColor('#3a7d4d')])
+            elif self.keyModifier == Qt.Key_0:
+                self.removeArrows([QColor('#80ff8c00'), QColor('#ff8c00')])
+            else:
+                self.removeArrows()
 
     def mouseMoveEvent(self, event):
         """Implements mouseMoveEvent() method. Executes drag action."""
@@ -454,24 +515,30 @@ class View(QWidget):
         # NOTE: Need to loop through the reversed list, otherwise an element will be skipped if an element was removed
         # in the previous iteration.
         for highlight in reversed(self.highlights):  # reversed list, because modifying while looping
-            if highlight.Type == self.SquareHighlight.Type and highlight.color == color:
+            if highlight.color == color:
                 self.removeHighlight(highlight)
 
-    def removeArrows(self):
+    def removeArrows(self, colors=None):
         """Removes all arrows and highlighted squares drawn on the board."""
-        for highlight in reversed(self.highlights):  # reversed list, because modifying while looping
-            if highlight.Type == self.Arrow.Type:
-                self.removeHighlight(highlight)
-            elif highlight.Type == self.SquareHighlight.Type and highlight.color == QColor('#80ff8c00'):
-                self.removeHighlight(highlight)
-
-    # TODO do not allow arrows and square highlights outside board
+        if colors:
+            for color in colors:
+                self.removeHighlightsOfColor(color)
+        else:
+            colors = [QColor('#80ff8c00'), QColor('#80ab272f'), QColor('#802d71ab'), QColor('#80ac8112'),
+                      QColor('#803a7d4d')]
+            for highlight in reversed(self.highlights):  # reversed list, because modifying while looping
+                if highlight.Type == self.Arrow.Type:
+                    self.removeHighlight(highlight)
+                elif highlight.Type == self.SquareHighlight.Type and highlight.color in colors:
+                    self.removeHighlight(highlight)
 
     def drawSquareHighlights(self, painter):
         """Draws all recognized highlights stored in the list."""
         for highlight in self.highlights:
             if highlight.Type == self.SquareHighlight.Type:
-                if highlight.color == QColor('#80ff8c00'):
+                colors = [QColor('#80ff8c00'), QColor('#80ab272f'), QColor('#802d71ab'), QColor('#80ac8112'),
+                          QColor('#803a7d4d')]
+                if highlight.color in colors:
                     rect = self.squareRect(highlight.file, highlight.rank)
                 else:
                     rect = self.squareRect(highlight.file, highlight.rank, self.orientation[0])

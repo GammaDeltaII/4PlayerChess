@@ -19,12 +19,12 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from PyQt5.QtWidgets import QMainWindow, QSizePolicy, QLayout, QListWidget, QListWidgetItem, QListView, QFrame, \
-    QFileDialog, QMenu, QAction, QDialog, QDialogButtonBox
-from PyQt5.QtCore import Qt, QSize, QPoint, QRect, QSettings
-from PyQt5.QtGui import QIcon, QColor, QFont, QFontMetrics, QPainter
+    QFileDialog, QMenu, QAction, QDialog, QDialogButtonBox, QScrollArea
+from PyQt5.QtCore import Qt, QSize, QPoint, QRect, QSettings, QUrl
+from PyQt5.QtGui import QIcon, QColor, QFont, QFontMetrics, QPainter, QDesktopServices
 from ui.mainwindow import Ui_MainWindow
 from ui.settings import Ui_Preferences
-from ui.about import Ui_About
+from ui.infodialog import Ui_InfoDialog
 from gui.algorithm import Teams
 from gui.view import Comment
 from urllib import request
@@ -39,8 +39,8 @@ SETTINGS = QSettings(COM, APP)
 
 # Semantic versioning: N.N.N-{alpha|beta|rc}.N
 MAJOR = str(0)
-MINOR = str(6)
-PATCH = str(1)
+MINOR = str(7)
+PATCH = str(0)
 PRE_RELEASE = False * ('-' + 'alpha' + str(1))  # alpha, beta or rc (= release candidate)
 VERSION = MAJOR + '.' + MINOR + '.' + PATCH + PRE_RELEASE
 
@@ -97,7 +97,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.commentField.focusOut.connect(self.setComment)
 
         # Connect menu actions
-        self.actionAbout.triggered.connect(self.about)
         self.actionCheck_for_Updates.triggered.connect(self.checkUpdate)
         self.actionPreferences.triggered.connect(self.showPreferences)
         self.actionQuit.triggered.connect(self.close)
@@ -116,6 +115,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.actionRotate_Board_Left.triggered.connect(lambda: self.view.rotateBoard(-1))
         self.actionRotate_Board_Right.triggered.connect(lambda: self.view.rotateBoard(1))
         self.actionFlip_Board.triggered.connect(lambda: self.view.rotateBoard(2))
+        self.actionAbout.triggered.connect(self.about)
+        self.actionQuick_Reference.triggered.connect(self.quickReference)
+        self.actionReport_Bug.triggered.connect(self.reportBug)
 
         # Connect button actions
         self.boardResetButton.clicked.connect(self.algorithm.newGame)
@@ -151,7 +153,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         regex = compile('[0-9]+.[0-9]+.[0-9]+')
         index = regex.search(url).span()
         latest = url[index[0]:index[1]]
-        updateDialog = About()
+        updateDialog = InfoDialog()
         updateDialog.setWindowTitle('Check for Updates...')
         if parse_version(latest) > parse_version(VERSION):
             updateDialog.label.setText("""
@@ -181,8 +183,94 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
     def about(self):
         """Shows application info dialog."""
-        about = About()
-        about.exec_()
+        aboutDialog = InfoDialog()
+        aboutDialog.label.setText("""
+            <center>
+            <p><b>4PlayerChess</b></p>
+            <small>
+            <p>Version """ + VERSION + """</p>
+            <p>Copyright &copy; 2018, GammaDeltaII</p>
+            <p>This software is licensed under the GNU General Public License v3.0<br>
+            <a href = 'https://www.gnu.org/licenses/gpl-3.0' style = 'color:grey;'>
+            https://www.gnu.org/licenses/gpl-3.0</a></p>
+            </small>
+            </center>
+            """)
+        aboutDialog.exec_()
+
+    def quickReference(self):
+        """Shows quick reference guide."""
+        quickReferenceDialog = InfoDialog()
+        quickReferenceDialog.resize(700, 700)
+        quickReferenceDialog.label.setFixedWidth(quickReferenceDialog.width() - 100)
+        scrollArea = QScrollArea(quickReferenceDialog)
+        scrollArea.move(quickReferenceDialog.label.pos())
+        labelSize = quickReferenceDialog.label.size()
+        scrollArea.resize(labelSize.width() + 20, quickReferenceDialog.height() - 180)
+        buttonPos = quickReferenceDialog.buttonBox.pos()
+        quickReferenceDialog.buttonBox.move(quickReferenceDialog.width() / 2 - quickReferenceDialog.buttonBox.width()
+                                            / 2, buttonPos.y() + (quickReferenceDialog.height() - 300))
+
+        quickReferenceDialog.setWindowTitle('Quick Reference Guide')
+        quickReferenceDialog.label.setText("""
+            <center><h1>Quick Reference Guide</h1></center>
+            <h3>Shortcuts</h3><small>(on Mac use &#8984; instead of Ctrl)</small>
+            <table>
+                <tr><td width = '50'>Ctrl+Q</td><td>Quit application</td></tr>
+                <tr><td>Ctrl+N</td><td>New game</td></tr>
+                <tr><td>Ctrl+O</td><td>Load game from PGN4 file</td></tr>
+                <tr><td>Ctrl+S</td><td>Save game to PGN4 file</td></tr>
+                <tr><td>Ctrl+C</td><td>Copy FEN4 to clipboard</td></tr>
+                <tr><td>Ctrl+V</td><td>Paste FEN4 from clipboard</td></tr>
+                <tr><td>Ctrl+L</td><td>Rotate board left (counterclockwise, next player)</td></tr>
+                <tr><td>Ctrl+R</td><td>Rotate board right (clockwise, previous player)</td></tr>
+                <tr><td>Ctrl+F</td><td>Flip board</td></tr>
+                <tr><td>&rarr;</td><td>Go to next move</td></tr>
+                <tr><td>&larr;</td><td>Go to previous move</td></tr>
+                <tr><td>&uarr;</td><td>Go to first move</td></tr>
+                <tr><td>&darr;</td><td>Go to last move</td></tr>
+            </table>
+            <h3>Arrows &amp; square highlights</h3>
+            <ul>
+                <li>Right-click on a square to highlight the square.</li>
+                <li>Right-click and drag to draw arrows.</li>
+                <li>Hold numeric key 0, 1, 2, 3 or 4 while clicking or dragging for orange (default), red, blue, yellow 
+                or green, respectively.</li>
+                <li>Left-click any empty square to remove all arrows and highlighted squares.</li>
+                <li>Left-clicking any empty square while holding numeric key 0, 1, 2, 3 or 4 will remove all arrows and 
+                square highlights of the respective color only.</li>
+                <li>Drawing an existing arrow or square highlight again will remove it.</li>
+            </ul>
+            <h3>Move list</h3>
+            <ul>
+                <li>Left-click a move to go to that move.</li>
+                <li>Right-click a move to delete the move or promote the variation it is part of.</li>
+                <li>Enter a comment in the comment field to save a comment for the selected move.</li>
+            </ul>
+            <h3>Player names</h3>
+            <ul>
+                <li>Click a player name to edit the name.</li>
+            </ul>
+            <h3>Preferences</h3>
+            <ul>
+                <li>'Auto-change arrow color' will change the color of arrows and square highlights with the board 
+                orientation, e.g. if the bottom player is red, the color will be red. If unchecked, the default color 
+                will be orange.</li>
+                <li>'Auto-rotate' will automatically rotate the board 90 degrees counterclockwise after each move. The 
+                current player will always be at the bottom, unless the board is manually rotated, e.g. if the board is 
+                manually flipped, the current player will always be at the top.</li>
+                <li>Preferences are saved to a platform-specific preferences file, which is displayed in the status bar 
+                at the bottom after saving.</li>
+            </ul>
+            """)
+        quickReferenceDialog.label.adjustSize()
+        scrollArea.setWidget(quickReferenceDialog.label)
+        scrollArea.show()
+        quickReferenceDialog.exec_()
+
+    def reportBug(self):
+        """Opens link to GitHub issues."""
+        QDesktopServices().openUrl(QUrl('https://github.com/GammaDeltaII/4PlayerChess/issues'))
 
     def addHighlight(self, fromFile, fromRank, toFile, toRank, color):
         """Adds move highlight to board view."""
@@ -293,7 +381,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.selectedSquare = 0
 
     def keyPressEvent(self, event):
-        """Handles arrow key press events to go to previous, next, first or last move."""
+        """Handles arrow key press events to go to previous, next, first or last move. Also stores key modifier for View
+        to draw different color arrows and squares."""
         if event.key() == Qt.Key_Left:
             self.algorithm.prevMove()
         if event.key() == Qt.Key_Right:
@@ -302,6 +391,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.algorithm.firstMove()
         if event.key() == Qt.Key_Down:
             self.algorithm.lastMove()
+        self.view.keyModifier = event.key()
+
+    def keyReleaseEvent(self, event):
+        """Resets key modifier for View."""
+        self.view.keyModifier = None
 
     def openFileNameDialog(self):
         """Shows file dialog to load a game from a PGN4 file."""
@@ -452,6 +546,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.actionDelete.setObjectName("actionDelete")
                 self.actionDelete.setText('Delete move')
                 self.actionDelete.triggered.connect(self.deleteMove)
+                self.actionPromote = QAction(None)
+                self.actionPromote.setObjectName("actionPromote")
+                self.actionPromote.setText('Promote variation')
+                self.actionPromote.triggered.connect(self.promoteVariation)
                 self.moveIndex = 0
                 self.setStyleSheet("""
                     QListWidget {color: rgb(0, 0, 0); font-family: Trebuchet MS; font-weight: bold; font-size: 12;
@@ -484,8 +582,49 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 else:
                     position = self.mapToGlobal(pos)
                     menu = QMenu()
+                    menu.addAction(self.actionPromote)
                     menu.addAction(self.actionDelete)
                     menu.exec_(position)
+
+            def promoteVariation(self):
+                """Promotes variation that selected move is part of."""
+                rowIndex = self.currentRow()
+                item = self.item(rowIndex)
+                moveIndex = None
+                count = 0
+                for index in range(main.moveListWidget.count()):
+                    row = main.moveListWidget.itemWidget(main.moveListWidget.item(index))
+                    if row != self:
+                        count += row.count()
+                    elif row == self:
+                        itemIndex = 0
+                        while itemIndex < row.count():
+                            baseItem = self.item(itemIndex)
+                            char = baseItem.text()[0]
+                            if char.isdigit() or char == '(' or char == ')' or char == '.':
+                                itemIndex += 1
+                            else:
+                                baseIndex = count + itemIndex
+                                break
+                        count += rowIndex
+                        moveIndex = count
+                key = (moveIndex, item.text())
+                baseKey = (baseIndex, baseItem.text())
+                currentNode = main.algorithm.moveDict[key]
+                baseNode = main.algorithm.moveDict[baseKey]  # first node of variation
+                parentNode = baseNode.parent
+                # Set position to move that was selected
+                actions = currentNode.pathFromRoot()
+                main.algorithm.firstMove()
+                for action in actions:
+                    exec('main.algorithm.' + action)
+                # Update move tree
+                parentNode.children.remove(baseNode)
+                parentNode.children.insert(0, baseNode)  # moving node to index 0 makes it main line
+                # Update movetext, dictionary, FEN4 and PGN4
+                main.algorithm.updateMoveText()
+                main.algorithm.getFen4()
+                main.algorithm.getPgn4()
 
             def deleteMove(self):
                 """Deletes move from the move list and updates the position."""
@@ -501,9 +640,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                         count += rowIndex
                         moveIndex = count
                 key = (moveIndex, item.text())
-                deletedNode = main.algorithm.moveDict[key]
+                currentNode = main.algorithm.moveDict[key]
                 # Set position to move preceding deleted move
-                actions = deletedNode.parent.pathFromRoot()
+                actions = currentNode.parent.pathFromRoot()
                 main.algorithm.firstMove()
                 for action in actions:
                     exec('main.algorithm.' + action)
@@ -512,7 +651,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     move = self.takeItem(i)
                     del move
                 # Delete node from move tree and update movetext, dictionary, FEN4 and PGN4
-                main.algorithm.currentMove.children.remove(deletedNode)
+                main.algorithm.currentMove.children.remove(currentNode)
                 main.algorithm.updateMoveText()
                 main.algorithm.getFen4()
                 main.algorithm.getPgn4()
@@ -690,38 +829,29 @@ class Preferences(QDialog, Ui_Preferences):
         """Sets preferences to saved values. Sets default values if no preferences saved."""
         self.showcoordinates.setChecked(SETTINGS.value('showcoordinates', True))
         self.shownames.setChecked(SETTINGS.value('shownames', True))
+        self.autocolor.setChecked(SETTINGS.value('autocolor', False))
         self.autorotate.setChecked(SETTINGS.value('autorotate', False))
 
     def save(self):
         """Saves preferences."""
         SETTINGS.setValue('showcoordinates', self.showcoordinates.isChecked())
         SETTINGS.setValue('shownames', self.shownames.isChecked())
+        SETTINGS.setValue('autocolor', self.autocolor.isChecked())
         SETTINGS.setValue('autorotate', self.autorotate.isChecked())
 
     def restoreDefaults(self):
         """Restores default preferences."""
         self.showcoordinates.setChecked(True)
         self.shownames.setChecked(True)
+        self.autocolor.setChecked(False)
         self.autorotate.setChecked(False)
 
 
-class About(QDialog, Ui_About):
+class InfoDialog(QDialog, Ui_InfoDialog):
     """The application info dialog. The imported UI code is generated by PyQt5 from reading the Qt Creator .ui file."""
     def __init__(self):
         super().__init__()
         self.setupUi(self)
-        self.label.setText("""
-            <center>
-            <p><b>4PlayerChess</b></p>
-            <small>
-            <p>Version """ + VERSION + """</p>
-            <p>Copyright &copy; 2018, GammaDeltaII</p>
-            <p>This software is licensed under the GNU General Public License v3.0<br>
-            <a href = 'https://www.gnu.org/licenses/gpl-3.0' style = 'color:grey;'>
-            https://www.gnu.org/licenses/gpl-3.0</a></p>
-            </small>
-            </center>
-            """)
 
     def paintEvent(self, event):
         """Implements paintEvent() method."""
