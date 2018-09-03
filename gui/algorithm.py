@@ -635,11 +635,12 @@ class Teams(Algorithm):
         if self.currentPlayer == self.Green and fromData[0] != 'g':
             return False
 
-        # TODO check if move is truly legal (checks / pins)
+        # TODO check if move is truly legal (checks)
         color = ['r', 'b', 'y', 'g'].index(fromData[0])
         piece = ['P', 'N', 'B', 'R', 'Q', 'K'].index(fromData[1]) + 4
-        target = 1 << self.board.square(toFile, toRank)
-        if not target & self.board.legalMoves(piece, fromFile, fromRank, color):
+        origin = self.board.square(fromFile, fromRank)
+        target = self.board.square(toFile, toRank)
+        if not (1 << target) & self.board.legalMoves(piece, origin, color):
             return False
 
         # Check if move already exists

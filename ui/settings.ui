@@ -56,7 +56,7 @@ QPushButton:pressed {
      <x>10</x>
      <y>20</y>
      <width>371</width>
-     <height>131</height>
+     <height>151</height>
     </rect>
    </property>
    <property name="title">
@@ -68,7 +68,7 @@ QPushButton:pressed {
       <x>20</x>
       <y>30</y>
       <width>378</width>
-      <height>103</height>
+      <height>125</height>
      </rect>
     </property>
     <layout class="QVBoxLayout" name="verticalLayout">
@@ -76,6 +76,20 @@ QPushButton:pressed {
       <widget class="QCheckBox" name="showcoordinates">
        <property name="text">
         <string>Show coordinates</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QCheckBox" name="showlegalmoves">
+       <property name="text">
+        <string>Show legal moves</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QCheckBox" name="coordinatehelp">
+       <property name="text">
+        <string>Show mouseover coordinate</string>
        </property>
       </widget>
      </item>

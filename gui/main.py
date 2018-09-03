@@ -39,7 +39,7 @@ SETTINGS = QSettings(COM, APP)
 
 # Semantic versioning: N.N.N-{alpha|beta|rc}.N
 MAJOR = str(0)
-MINOR = str(7)
+MINOR = str(8)
 PATCH = str(0)
 PRE_RELEASE = False * ('-' + 'alpha' + str(1))  # alpha, beta or rc (= release candidate)
 VERSION = MAJOR + '.' + MINOR + '.' + PATCH + PRE_RELEASE
@@ -52,7 +52,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.setupUi(self)
 
         # Show license notice
-        self.statusbar.showMessage(APP + '. Copyright (C) 2018, GammaDeltaII (GNU GPL-3.0)', 5000)
+        self.statusbar.showMessage(APP + '. Copyright (C) 2018, GammaDeltaII (GNU GPL-3.0-or-later)', 5000)
 
         # Create algorithm instance (view instance is already created in UI code)
         self.algorithm = Teams()
@@ -116,6 +116,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.actionRotate_Board_Right.triggered.connect(lambda: self.view.rotateBoard(1))
         self.actionFlip_Board.triggered.connect(lambda: self.view.rotateBoard(2))
         self.actionAbout.triggered.connect(self.about)
+        self.actionAbout_PyQt.triggered.connect(self.aboutPyQt)
         self.actionQuick_Reference.triggered.connect(self.quickReference)
         self.actionReport_Bug.triggered.connect(self.reportBug)
 
@@ -184,19 +185,44 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def about(self):
         """Shows application info dialog."""
         aboutDialog = InfoDialog()
+        aboutDialog.setWindowTitle('About 4PlayerChess')
         aboutDialog.label.setText("""
             <center>
             <p><b>4PlayerChess</b></p>
             <small>
             <p>Version """ + VERSION + """</p>
             <p>Copyright &copy; 2018, GammaDeltaII</p>
-            <p>This software is licensed under the GNU General Public License v3.0<br>
+            <p>This software is licensed under the GNU General Public License v3.0 or later<br>
             <a href = 'https://www.gnu.org/licenses/gpl-3.0' style = 'color:grey;'>
             https://www.gnu.org/licenses/gpl-3.0</a></p>
             </small>
             </center>
             """)
         aboutDialog.exec_()
+
+    def aboutPyQt(self):
+        """Shows PyQt info dialog."""
+        aboutPyQt = InfoDialog()
+        aboutPyQt.resize(400, 320)
+        aboutPyQt.label.resize(300, 140)
+        buttonPos = aboutPyQt.buttonBox.pos()
+        aboutPyQt.buttonBox.move(aboutPyQt.width() / 2 - aboutPyQt.buttonBox.width() / 2,
+                                 buttonPos.y() + (aboutPyQt.height() - 300))
+        aboutPyQt.setWindowTitle('About PyQt')
+        aboutPyQt.label.setText("""
+            <center>
+            <p><b>This software uses PyQt5</b></p>
+            <small>
+            <p>PyQt5 is a comprehensive set of Python bindings for Qt 5. PyQt brings together the Qt 
+            C++ cross-platform application framework and the cross-platform interpreted language Python.</p>
+            <p>PyQt is copyright &copy; <a href = 'https://www.riverbankcomputing.com/software/pyqt/' style = 
+            'color:white;'>Riverbank Computing Ltd.</a></p>
+            <p>Qt is copyright &copy; <a href = 'https://www.qt.io' style =
+            'color:white;'>The Qt Company Ltd.</a></p>
+            </small>
+            </center>
+            """)
+        aboutPyQt.exec_()
 
     def quickReference(self):
         """Shows quick reference guide."""
@@ -253,6 +279,8 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             </ul>
             <h3>Preferences</h3>
             <ul>
+                <li>'Show mouseover coordinate' will display the coordinate of a square when moving the mouse over it.
+                </li>
                 <li>'Auto-change arrow color' will change the color of arrows and square highlights with the board 
                 orientation, e.g. if the bottom player is red, the color will be red. If unchecked, the default color 
                 will be orange.</li>
@@ -297,7 +325,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 self.clickPoint = square
                 self.selectedSquare = self.view.SquareHighlight(square.x(), square.y(), color)
                 self.view.addHighlight(self.selectedSquare)
+                self.view.showLegalMoves()
         else:
+            self.view.removeLegalMoveIndicators()
             moved = False
             if square != self.clickPoint:
                 moved = self.algorithm.makeMove(self.clickPoint.x(), self.clickPoint.y(), square.x(), square.y())
@@ -827,22 +857,28 @@ class Preferences(QDialog, Ui_Preferences):
 
     def initialize(self):
         """Sets preferences to saved values. Sets default values if no preferences saved."""
-        self.showcoordinates.setChecked(SETTINGS.value('showcoordinates', True))
-        self.shownames.setChecked(SETTINGS.value('shownames', True))
+        self.showcoordinates.setChecked(SETTINGS.value('showcoordinates', False))
+        self.showlegalmoves.setChecked(SETTINGS.value('showlegalmoves', False))
+        self.coordinatehelp.setChecked(SETTINGS.value('coordinatehelp', False))
+        self.shownames.setChecked(SETTINGS.value('shownames', False))
         self.autocolor.setChecked(SETTINGS.value('autocolor', False))
         self.autorotate.setChecked(SETTINGS.value('autorotate', False))
 
     def save(self):
         """Saves preferences."""
         SETTINGS.setValue('showcoordinates', self.showcoordinates.isChecked())
+        SETTINGS.setValue('showlegalmoves', self.showlegalmoves.isChecked())
+        SETTINGS.setValue('coordinatehelp', self.coordinatehelp.isChecked())
         SETTINGS.setValue('shownames', self.shownames.isChecked())
         SETTINGS.setValue('autocolor', self.autocolor.isChecked())
         SETTINGS.setValue('autorotate', self.autorotate.isChecked())
 
     def restoreDefaults(self):
         """Restores default preferences."""
-        self.showcoordinates.setChecked(True)
-        self.shownames.setChecked(True)
+        self.showcoordinates.setChecked(False)
+        self.showlegalmoves.setChecked(False)
+        self.coordinatehelp.setChecked(False)
+        self.shownames.setChecked(False)
         self.autocolor.setChecked(False)
         self.autorotate.setChecked(False)
 

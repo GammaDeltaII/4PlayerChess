@@ -59,6 +59,5 @@ class Ui_InfoDialog(object):
         QtCore.QMetaObject.connectSlotsByName(InfoDialog)
 
     def retranslateUi(self, InfoDialog):
-        _translate = QtCore.QCoreApplication.translate
-        InfoDialog.setWindowTitle(_translate("InfoDialog", "About 4PlayerChess"))
+        pass
 

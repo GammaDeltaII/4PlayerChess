@@ -800,6 +800,7 @@ color: rgb(0, 0, 0);</string>
     </property>
     <addaction name="actionNew_Game"/>
     <addaction name="actionLoad_Game"/>
+    <addaction name="separator"/>
     <addaction name="actionSave_Game_As"/>
    </widget>
    <widget class="QMenu" name="menuEdit">
@@ -823,6 +824,7 @@ color: rgb(0, 0, 0);</string>
     </property>
     <addaction name="actionAbout"/>
     <addaction name="actionCheck_for_Updates"/>
+    <addaction name="separator"/>
     <addaction name="actionPreferences"/>
     <addaction name="separator"/>
     <addaction name="actionQuit"/>
@@ -831,6 +833,8 @@ color: rgb(0, 0, 0);</string>
     <property name="title">
      <string>Help</string>
     </property>
+    <addaction name="actionAbout_PyQt"/>
+    <addaction name="separator"/>
     <addaction name="actionQuick_Reference"/>
     <addaction name="actionReport_Bug"/>
    </widget>
@@ -989,6 +993,11 @@ color: grey;</string>
    </property>
    <property name="statusTip">
     <string>Open GitHub issues page in browser to report a bug or request a feature</string>
+   </property>
+  </action>
+  <action name="actionAbout_PyQt">
+   <property name="text">
+    <string>About PyQt</string>
    </property>
   </action>
  </widget>
