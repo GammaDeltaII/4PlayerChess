@@ -648,7 +648,7 @@ class Algorithm(QObject):
         elif main and not variations:
             if not (move - 1) % 4:
                 token = str(move // 4 + 1) + '.'
-                self.chesscomMoveText += token + ' '
+                self.chesscomMoveText += '\n' + token + ' '
                 self.moveText += token + ' '
                 self.moveDict[(self.index, token)] = None
                 self.index += 1
