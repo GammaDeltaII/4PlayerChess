@@ -2,7 +2,7 @@
 
 # Form implementation generated from reading ui file 'settings.ui'
 #
-# Created by: PyQt5 UI code generator 5.10.1
+# Created by: PyQt5 UI code generator 5.11.2
 #
 # WARNING! All changes made in this file will be lost!
 
@@ -34,10 +34,10 @@ class Ui_Preferences(object):
         self.buttonBox.setOrientation(QtCore.Qt.Horizontal)
         self.buttonBox.setStandardButtons(QtWidgets.QDialogButtonBox.Cancel|QtWidgets.QDialogButtonBox.RestoreDefaults|QtWidgets.QDialogButtonBox.Save)
         self.buttonBox.setObjectName("buttonBox")
-        self.groupBox = QtWidgets.QGroupBox(Preferences)
-        self.groupBox.setGeometry(QtCore.QRect(10, 20, 371, 151))
-        self.groupBox.setObjectName("groupBox")
-        self.layoutWidget = QtWidgets.QWidget(self.groupBox)
+        self.board = QtWidgets.QGroupBox(Preferences)
+        self.board.setGeometry(QtCore.QRect(10, 10, 371, 161))
+        self.board.setObjectName("board")
+        self.layoutWidget = QtWidgets.QWidget(self.board)
         self.layoutWidget.setGeometry(QtCore.QRect(20, 30, 378, 125))
         self.layoutWidget.setObjectName("layoutWidget")
         self.verticalLayout = QtWidgets.QVBoxLayout(self.layoutWidget)
@@ -61,6 +61,18 @@ class Ui_Preferences(object):
         self.autorotate = QtWidgets.QCheckBox(self.layoutWidget)
         self.autorotate.setObjectName("autorotate")
         self.verticalLayout.addWidget(self.autorotate)
+        self.general = QtWidgets.QGroupBox(Preferences)
+        self.general.setGeometry(QtCore.QRect(10, 180, 371, 51))
+        self.general.setObjectName("general")
+        self.layoutWidget_3 = QtWidgets.QWidget(self.general)
+        self.layoutWidget_3.setGeometry(QtCore.QRect(20, 20, 341, 31))
+        self.layoutWidget_3.setObjectName("layoutWidget_3")
+        self.verticalLayout_3 = QtWidgets.QVBoxLayout(self.layoutWidget_3)
+        self.verticalLayout_3.setContentsMargins(0, 0, 0, 0)
+        self.verticalLayout_3.setObjectName("verticalLayout_3")
+        self.chesscom = QtWidgets.QCheckBox(self.layoutWidget_3)
+        self.chesscom.setObjectName("chesscom")
+        self.verticalLayout_3.addWidget(self.chesscom)
 
         self.retranslateUi(Preferences)
         self.buttonBox.accepted.connect(Preferences.accept)
@@ -70,11 +82,13 @@ class Ui_Preferences(object):
     def retranslateUi(self, Preferences):
         _translate = QtCore.QCoreApplication.translate
         Preferences.setWindowTitle(_translate("Preferences", "Preferences"))
-        self.groupBox.setTitle(_translate("Preferences", "Board"))
+        self.board.setTitle(_translate("Preferences", "Board"))
         self.showcoordinates.setText(_translate("Preferences", "Show coordinates"))
         self.showlegalmoves.setText(_translate("Preferences", "Show legal moves"))
         self.coordinatehelp.setText(_translate("Preferences", "Show mouseover coordinate"))
         self.shownames.setText(_translate("Preferences", "Show player names"))
         self.autocolor.setText(_translate("Preferences", "Auto-change arrow color"))
         self.autorotate.setText(_translate("Preferences", "Auto-rotate"))
+        self.general.setTitle(_translate("Preferences", "General"))
+        self.chesscom.setText(_translate("Preferences", "Use chess.com FEN4 and PGN4"))
 

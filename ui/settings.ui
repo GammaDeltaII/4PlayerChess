@@ -50,13 +50,13 @@ QPushButton:pressed {
     <set>QDialogButtonBox::Cancel|QDialogButtonBox::RestoreDefaults|QDialogButtonBox::Save</set>
    </property>
   </widget>
-  <widget class="QGroupBox" name="groupBox">
+  <widget class="QGroupBox" name="board">
    <property name="geometry">
     <rect>
      <x>10</x>
-     <y>20</y>
+     <y>10</y>
      <width>371</width>
-     <height>151</height>
+     <height>161</height>
     </rect>
    </property>
    <property name="title">
@@ -111,6 +111,38 @@ QPushButton:pressed {
       <widget class="QCheckBox" name="autorotate">
        <property name="text">
         <string>Auto-rotate</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </widget>
+  </widget>
+  <widget class="QGroupBox" name="general">
+   <property name="geometry">
+    <rect>
+     <x>10</x>
+     <y>180</y>
+     <width>371</width>
+     <height>51</height>
+    </rect>
+   </property>
+   <property name="title">
+    <string>General</string>
+   </property>
+   <widget class="QWidget" name="layoutWidget_3">
+    <property name="geometry">
+     <rect>
+      <x>20</x>
+      <y>20</y>
+      <width>341</width>
+      <height>31</height>
+     </rect>
+    </property>
+    <layout class="QVBoxLayout" name="verticalLayout_3">
+     <item>
+      <widget class="QCheckBox" name="chesscom">
+       <property name="text">
+        <string>Use chess.com FEN4 and PGN4</string>
        </property>
       </widget>
      </item>

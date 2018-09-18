@@ -38,6 +38,7 @@ class View(QWidget):
     clicked = pyqtSignal(QPoint)
     squareSizeChanged = pyqtSignal(QSize)
     playerNameEdited = pyqtSignal(str, str, str, str)
+    playerRatingEdited = pyqtSignal(str, str, str, str)
     pieceMoved = pyqtSignal(QPoint, QPoint)
     dragStarted = pyqtSignal(QPoint)
 
@@ -54,12 +55,16 @@ class View(QWidget):
         # Player labels
         self.redName = None
         self.redNameEdit = None
+        self.redRating = '?'
         self.blueName = None
         self.blueNameEdit = None
+        self.blueRating = '?'
         self.yellowName = None
         self.yellowNameEdit = None
+        self.yellowRating = '?'
         self.greenName = None
         self.greenNameEdit = None
+        self.greenRating = '?'
         self.createPlayerLabels()
         # Drag-drop
         self.setAcceptDrops(True)
@@ -908,11 +913,42 @@ class View(QWidget):
     def setPlayerName(self, name):
         """Updates player name label and deactivates player name edit field."""
         nameEdit = self.sender()
-        name.setText(nameEdit.text())
+        s = name.text().split('\n')
+        if len(s) == 2:
+            rating = s[-1]
+            n = nameEdit.text().split(' ')
+            if len(n) > 1:
+                e = n[-1].strip('()')
+                if e.isdigit():
+                    rating = '(' + e + ')'
+                    name.setText(' '.join(n[:-1]) + '\n' + rating)
+                else:
+                    name.setText(' '.join(n) + '\n' + rating)
+            else:
+                name.setText(' '.join(n) + '\n' + rating)
+        else:
+            rating = None
+            n = nameEdit.text().split(' ')
+            if len(n) > 1:
+                e = n[-1].strip('()')
+                if e.isdigit():
+                    rating = '(' + e + ')'
+            if rating:
+                name.setText(' '.join(n[:-1]) + '\n' + rating)
+            else:
+                name.setText(' '.join(n))
         nameEdit.setHidden(True)
         name.setHidden(False)
-        self.playerNameEdited.emit(self.redName.text(), self.blueName.text(), self.yellowName.text(),
-                                   self.greenName.text())
+        red = self.redName.text().split('\n')
+        blue = self.blueName.text().split('\n')
+        yellow = self.yellowName.text().split('\n')
+        green = self.greenName.text().split('\n')
+        self.playerNameEdited.emit(red[0], blue[0], yellow[0], green[0])
+        redRating = red[-1].strip('()') if len(red) > 1 else self.redRating
+        blueRating = blue[-1].strip('()') if len(blue) > 1 else self.blueRating
+        yellowRating = yellow[-1].strip('()') if len(yellow) > 1 else self.yellowRating
+        greenRating = green[-1].strip('()') if len(green) > 1 else self.greenRating
+        self.playerRatingEdited.emit(redRating, blueRating, yellowRating, greenRating)
 
     def setPlayerNames(self, red, blue, yellow, green):
         """Sets player names to names obtained from PGN4 file."""
@@ -928,6 +964,18 @@ class View(QWidget):
         self.blueName.setText(blue)
         self.yellowName.setText(yellow)
         self.greenName.setText(green)
+        self.setPlayerRating(self.redRating, self.blueRating, self.yellowRating, self.greenRating)
+
+    def setPlayerRating(self, redRating, blueRating, yellowRating, greenRating):
+        """Sets the player rating according to the PGN4 file."""
+        if redRating != '?':
+            self.redName.setText(self.redName.text() + '\n(' + redRating + ')')
+        if blueRating != '?':
+            self.blueName.setText(self.blueName.text() + '\n(' + blueRating + ')')
+        if yellowRating != '?':
+            self.yellowName.setText(self.yellowName.text() + '\n(' + yellowRating + ')')
+        if greenRating != '?':
+            self.greenName.setText(self.greenName.text() + '\n(' + greenRating + ')')
 
 
 class Comment(QPushButton):

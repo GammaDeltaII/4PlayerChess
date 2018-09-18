@@ -18,7 +18,12 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from PyQt5.QtCore import QObject, pyqtSignal
+from PyQt5.QtCore import QObject, pyqtSignal, QSettings
+
+# Load settings
+COM = '4pc'
+APP = '4PlayerChess'
+SETTINGS = QSettings(COM, APP)
 
 RED, BLUE, YELLOW, GREEN, PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING = range(10)
 
@@ -796,6 +801,12 @@ class Board(QObject):
 
     def parseFen4(self, fen4):
         """Sets board position according to the FEN4 string fen4."""
+        if SETTINGS.value('chesscom'):
+            # Remove chess.com prefix and commas
+            i = fen4.rfind('-')
+            fen4 = fen4[i+1:]
+            fen4 = fen4.replace(',', '')
+            fen4 += ' '
         index = 0
         skip = 0
         for rank in reversed(range(self.ranks)):
@@ -867,4 +878,36 @@ class Board(QObject):
                 fen4 += ' '
             else:
                 fen4 += '/'
+        return fen4
+
+    def getChesscomFen4(self):
+        """Generates chess.com compatible FEN4."""
+        fen4 = ''
+        skip = 0
+        prev = ' '
+        for rank in reversed(range(self.ranks)):
+            for file in range(self.files):
+                char = self.getData(file, rank)
+                # If current square is empty, increment skip value
+                if char == ' ':
+                    skip += 1
+                    prev = char
+                else:
+                    # If current square is not empty, but previous square was empty, append skip value to FEN4 string,
+                    # unless the previous square was on the previous rank
+                    if prev == ' ' and file != 0:
+                        fen4 += str(skip) + ','
+                        skip = 0
+                    # Append algebraic piece name to FEN4 string
+                    fen4 += char + ','
+                    prev = char
+            # If skip is non-zero at end of rank, append skip and reset to zero
+            if skip > 0:
+                fen4 += str(skip) + ','
+                skip = 0
+            # Append slash at end of rank
+            if rank != 0:
+                fen4 = fen4[:-1]
+                fen4 += '/'
+        fen4 = fen4[:-1]
         return fen4

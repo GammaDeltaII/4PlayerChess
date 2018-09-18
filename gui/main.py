@@ -39,7 +39,7 @@ SETTINGS = QSettings(COM, APP)
 
 # Semantic versioning: N.N.N-{alpha|beta|rc}.N
 MAJOR = str(0)
-MINOR = str(8)
+MINOR = str(9)
 PATCH = str(0)
 PRE_RELEASE = False * ('-' + 'alpha' + str(1))  # alpha, beta or rc (= release candidate)
 VERSION = MAJOR + '.' + MINOR + '.' + PATCH + PRE_RELEASE
@@ -90,11 +90,14 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.algorithm.pgn4Generated.connect(self.pgnField.setPlainText)
         self.algorithm.removeHighlight.connect(self.view.removeHighlightsOfColor)
         self.view.playerNameEdited.connect(self.algorithm.updatePlayerNames)
+        self.view.playerRatingEdited.connect(self.algorithm.updatePlayerRating)
         self.algorithm.playerNamesChanged.connect(self.view.setPlayerNames)
+        self.algorithm.playerRatingChanged.connect(self.view.setPlayerRating)
         self.algorithm.addHighlight.connect(self.addHighlight)
         self.view.dragStarted.connect(self.selectDragStartSquare)
         self.view.pieceMoved.connect(self.movePiece)
         self.commentField.focusOut.connect(self.setComment)
+        self.algorithm.cannotReadPgn4.connect(self.pgnParseError)
 
         # Connect menu actions
         self.actionCheck_for_Updates.triggered.connect(self.checkUpdate)
@@ -273,9 +276,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 <li>Right-click a move to delete the move or promote the variation it is part of.</li>
                 <li>Enter a comment in the comment field to save a comment for the selected move.</li>
             </ul>
-            <h3>Player names</h3>
+            <h3>Player names and rating</h3>
             <ul>
-                <li>Click a player name to edit the name.</li>
+                <li>Click a player name to edit the name and rating. You can specify the rating by typing the name 
+                followed by a space and then the rating.</li>
             </ul>
             <h3>Preferences</h3>
             <ul>
@@ -287,6 +291,9 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 <li>'Auto-rotate' will automatically rotate the board 90 degrees counterclockwise after each move. The 
                 current player will always be at the bottom, unless the board is manually rotated, e.g. if the board is 
                 manually flipped, the current player will always be at the top.</li>
+                <li>'Use chess.com FEN4 and PGN4' enables loading and saving chess.com compatible FEN4 and PGN4. NOTE:
+                chess.com does NOT currently support subvariations. If you have subvariations in your PGN4, the 
+                chess.com analysis board will not be able to read it.</li>
                 <li>Preferences are saved to a platform-specific preferences file, which is displayed in the status bar 
                 at the bottom after saving.</li>
             </ul>
@@ -427,6 +434,21 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         """Resets key modifier for View."""
         self.view.keyModifier = None
 
+    def pgnParseError(self):
+        """Shows dialog explaining the PGN4 cannot be read and settings may need to be changed."""
+        pgnErrorDialog = InfoDialog()
+        pgnErrorDialog.setWindowTitle('PGN4 parse error')
+        pgnErrorDialog.label.setText("""
+                    <center>
+                    <p><b>Cannot read PGN4!</b></p>
+                    <p>If you are trying to load a chess.com PGN4, please make sure the checkbox in settings is 
+                    <i>checked</i>. If not, make sure it is <i>unchecked</i>. You can only load a Teams variant PGN4. 
+                    FFA is not supported. If the issue remains, please report it.
+                    </p>
+                    </center>
+                    """)
+        pgnErrorDialog.exec_()
+
     def openFileNameDialog(self):
         """Shows file dialog to load a game from a PGN4 file."""
         options = QFileDialog.Options()
@@ -438,8 +460,12 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             with open(fileName, 'r') as file:
                 pgn4 = ''.join(file.readlines())
                 self.pgnField.setPlainText(pgn4)
-                self.algorithm.parsePgn4(pgn4)
-                self.statusbar.showMessage('Game loaded.', 5000)
+                if SETTINGS.value('chesscom'):
+                    loaded = self.algorithm.parseChesscomPgn4(pgn4)
+                else:
+                    loaded = self.algorithm.parsePgn4(pgn4)
+                if loaded:
+                    self.statusbar.showMessage('Game loaded successfully.', 5000)
 
     def saveFileDialog(self):
         """Shows file dialog to save a game to a PGN4 file."""
@@ -863,6 +889,7 @@ class Preferences(QDialog, Ui_Preferences):
         self.shownames.setChecked(SETTINGS.value('shownames', False))
         self.autocolor.setChecked(SETTINGS.value('autocolor', False))
         self.autorotate.setChecked(SETTINGS.value('autorotate', False))
+        self.chesscom.setChecked(SETTINGS.value('chesscom', False))
 
     def save(self):
         """Saves preferences."""
@@ -872,6 +899,7 @@ class Preferences(QDialog, Ui_Preferences):
         SETTINGS.setValue('shownames', self.shownames.isChecked())
         SETTINGS.setValue('autocolor', self.autocolor.isChecked())
         SETTINGS.setValue('autorotate', self.autorotate.isChecked())
+        SETTINGS.setValue('chesscom', self.chesscom.isChecked())
 
     def restoreDefaults(self):
         """Restores default preferences."""
@@ -881,6 +909,7 @@ class Preferences(QDialog, Ui_Preferences):
         self.shownames.setChecked(False)
         self.autocolor.setChecked(False)
         self.autorotate.setChecked(False)
+        self.chesscom.setChecked(False)
 
 
 class InfoDialog(QDialog, Ui_InfoDialog):
