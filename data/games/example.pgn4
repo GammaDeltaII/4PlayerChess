@@ -1,0 +1,16 @@
+[Variant "Teams"]
+[Site "www.chess.com/4-player-chess"]
+[Date "Tue Sep 18 2018 15:14:24 (UTC)"]
+[Red "?"]
+[RedElo "?"]
+[Blue "?"]
+[BlueElo "?"]
+[Yellow "?"]
+[YellowElo "?"]
+[Green "?"]
+[GreenElo "?"]
+[PlyCount "12"]
+[TimeControl "G/1 d15"]
+
+1. h2-h3 .. b6-d6 .. h13-h12 .. m9-l9 2. Qg1-k5 .. b8-c8 .. Qh14-h13 .. Nn5-l6 
+3. Qk5-i7 { Keeping blue's queen inside. } ( 3. Qk5-k7 { Perhaps more pressure against green and defending f2. } .. Qa7-d10 .. Qh13-g12 .. m8-k8 { However, now blue's queen is active. } ) .. Ba9-b8 .. Qh13-g12 .. m8-k8 
