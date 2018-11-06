@@ -1,18 +1,14 @@
 [Variant "Teams"]
 [Site "www.chess.com/4-player-chess"]
-[Date "Tue Sep 18 2018 15:20:17 (UTC)"]
-[Red "?"]
-[RedElo "?"]
-[Blue "?"]
-[BlueElo "?"]
-[Yellow "?"]
-[YellowElo "?"]
-[Green "?"]
-[GreenElo "?"]
-[PlyCount "12"]
+[Date "Tue Nov 06 2018 03:38:51 (UTC)"]
 [TimeControl "G/1 d15"]
+[PlyCount "4"]
+[CurrentMove "4-2-1"]
+[CurrentPosition "R-0,0,0,0-1,1,0,1-1,1,0,1-0,0,0,0-4-3,yR,yN,yB,yK,yQ,yB,yN,yR,3/3,yP,yP,yP,yP,1,yP,yP,yP,3/7,yP,6/bR,bP,10,gP,gR/bN,bP,10,gP,gN/bB,bP,10,gP,gB/bK,bP,8,gP,2,gQ/bQ,bP,10,gP,gK/bB,2,bP,8,gP,gB/bN,bP,10,gP,gN/bR,bP,10,gP,gR/7,rP,6/3,rP,rP,rP,rP,1,rP,rP,rP,3/3,rR,rN,rB,rQ,rK,rB,rN,rR,3"]
 
-
-1. h2-h3 .. b6-d6 .. h13-h12 .. m9-l9 
-2. Qg1-k5 .. b8-c8 .. Qh14-h13 .. Nn5-l6 
-3. Qk5-i7 { Keeping blue's queen inside. } ( 3. Qk5-k7 { Adding more pressure against green and defending f2. } .. Qa7-d10 .. Qh13-g12 .. m8-k8 { However, now blue's queen is active. } ) .. Ba9-b8 .. Qh13-g12 .. m8-k8 
+1. h2-h3 .. b6-d6 .. h13-h12 ( 1.. g13-g12 .. Nn5-l6 
+2. k2-k4 .. Qa7-c5 .. Qh14-d10 .. m7-l7 
+3. Ne1-f3 .. Qc5-c9 .. Qd10xQc9 .. Bn6xBf14 
+4. Qg1-h2 .. Na10xQc9 .. Kg14xBf14 ) .. Nn10-l9 { Knight opening } ( 2.. m9-l9 { Standard opening } 
+2. e2-e3 ( 2. Qg1-k5 ) ) ( 2.. m8-k8 { Blocks g12-m6 diagonal immediately } 
+2. e2-e3 .. b8-c8 .. Qh14-h13 .. m9-l9 ) 

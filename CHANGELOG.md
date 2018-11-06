@@ -23,6 +23,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0).
 
 <!-- Types of changes: Added, Changed, Deprecated, Removed, Fixed -->
 
+## [0.10.0] - 06/11/2018
+### Added:
+- Support for CurrentMove tag in chess.com PGN4, allowing to start at a certain move in the game ("ply-variation-move")
+
+
 ## [0.9.0] - 18/09/2018
 **NOTE:** The chess.com analysis board does not support subvariations and hence will not be able to read any PGN4 with subvariations.
 ### Added:
@@ -115,6 +120,7 @@ Initial development release.
 
 
 <!-- Links to releases -->
+[0.10.0]: https://github.com/GammaDeltaII/4PlayerChess/releases/tag/0.10.0
 [0.9.0]: https://github.com/GammaDeltaII/4PlayerChess/releases/tag/0.9.0
 [0.8.0]: https://github.com/GammaDeltaII/4PlayerChess/releases/tag/0.8.0
 [0.7.0]: https://github.com/GammaDeltaII/4PlayerChess/releases/tag/0.7.0

@@ -39,7 +39,7 @@ SETTINGS = QSettings(COM, APP)
 
 # Semantic versioning: N.N.N-{alpha|beta|rc}.N
 MAJOR = str(0)
-MINOR = str(9)
+MINOR = str(10)
 PATCH = str(0)
 PRE_RELEASE = False * ('-' + 'alpha' + str(1))  # alpha, beta or rc (= release candidate)
 VERSION = MAJOR + '.' + MINOR + '.' + PATCH + PRE_RELEASE
@@ -176,11 +176,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                 <center>
                 <p style = 'font-size: 20px;'><b>No update available.</b></p>
                 <br><br>
-                Current version is latest version.
-                <br>
-                <small>
-                <p>(Current version: """ + VERSION + """)</p>
-                </small>
+                Current version (""" + VERSION + """) is latest version.
                 </center>
                 """)
         updateDialog.exec_()
