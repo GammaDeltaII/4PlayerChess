@@ -26,16 +26,16 @@ from ui.mainwindow import Ui_MainWindow
 from ui.settings import Ui_Preferences
 from ui.infodialog import Ui_InfoDialog
 from gui.algorithm import Teams
-from gui.view import Comment
 from urllib import request
 import certifi
 from re import compile
 from pkg_resources import parse_version
+from gui.settings import Settings
 
 # Load settings
 COM = '4pc'
 APP = '4PlayerChess'
-SETTINGS = QSettings(COM, APP)
+SETTINGS = Settings()
 
 # Semantic versioning: N.N.N-{alpha|beta|rc}.N
 MAJOR = str(0)
@@ -56,13 +56,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
 
         # Create algorithm instance (view instance is already created in UI code)
         self.algorithm = Teams()
-
-        # Create comment label
-        self.comment = Comment()
-        self.comment.setParent(self.moveListTab)
-        self.comment.setEnabled(False)
-        self.comment.move(self.commentField.parent().pos())
-        self.comment.show()
 
         # Set piece icons
         pieces = ['rP', 'rN', 'rR', 'rB', 'rQ', 'rK',
@@ -139,7 +132,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.firstMoveButton.clicked.connect(self.view.repaint)
         self.lastMoveButton.clicked.connect(self.algorithm.lastMove)
         self.lastMoveButton.clicked.connect(self.view.repaint)
-        self.comment.clicked.connect(self.editComment)
 
         # Start new game
         self.algorithm.newGame()
@@ -337,6 +329,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.clickPoint = QPoint()
             if not moved:
                 self.view.removeHighlight(self.selectedSquare)
+                self.clickPoint = square
+                self.selectedSquare = self.view.SquareHighlight(square.x(), square.y(), color)
+                self.view.addHighlight(self.selectedSquare)
+                self.view.showLegalMoves()
             else:
                 self.moveHighlight = self.view.SquareHighlight(square.x(), square.y(), color)
                 self.view.addHighlight(self.moveHighlight)
@@ -354,7 +350,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
                     color = QColor('#00000000')
                 self.view.removeHighlightsOfColor(color)
                 self.moveHighlight = 0
-            self.selectedSquare = 0
+                self.selectedSquare = 0
 
     def selectDragStartSquare(self, square):
         """Highlights the dragged piece origin square."""
@@ -370,6 +366,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             color = QColor('#00000000')
         # Remove click highlight, if it exists
         if self.selectedSquare:
+            self.view.removeLegalMoveIndicators()
             self.view.removeHighlight(self.selectedSquare)
             self.clickPoint = QPoint()
             self.selectedSquare = 0
@@ -377,6 +374,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         if squareData != ' ' and squareData[0] == self.algorithm.currentPlayer:
             self.selectedSquare = self.view.SquareHighlight(square.x(), square.y(), color)
             self.view.addHighlight(self.selectedSquare)
+            self.view.showLegalMoves()
 
     def movePiece(self, fromSquare, toSquare):
         """Handles piece drag event to move dragged piece to drop square."""
@@ -456,7 +454,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             with open(fileName, 'r') as file:
                 pgn4 = ''.join(file.readlines())
                 self.pgnField.setPlainText(pgn4)
-                if SETTINGS.value('chesscom'):
+                if SETTINGS.checkSetting('chesscom'):
                     loaded = self.algorithm.parseChesscomPgn4(pgn4)
                 else:
                     loaded = self.algorithm.parsePgn4(pgn4)
@@ -487,14 +485,11 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         self.resetComment()
         self.view.repaint()  # Forced repaint
 
-    def setMoveComment(self, comment=True):
+    def setMoveComment(self):
         """Saves comment for current move."""
-        if comment:
-            text = self.commentField.toPlainText()
-            text = text.replace('\n', ' ')
-            self.algorithm.currentMove.comment = text
-        else:
-            self.algorithm.currentMove.comment = None
+        text = self.commentField.toPlainText()
+        text = text.replace('\n', ' ')
+        self.algorithm.currentMove.comment = text
 
     def editComment(self):
         """Activates comment edit field."""
@@ -503,80 +498,31 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self.commentField.selectAll()
         else:
             self.commentField.clear()
-        self.comment.setHidden(True)
         self.commentField.setFocus(True)
 
     def setComment(self):
         """Updates comment and deactivates comment edit field."""
         if self.commentField.toPlainText():
-            self.comment.setText(self.commentField.toPlainText())
-            self.comment.setStyleSheet("""
-                border: 0px;
-                padding: 4px;
-                border-radius: 0px;
-                background-color: white;
-                text-align: top left;
-                color: black;
-                font-family: Trebuchet MS;
-                """)
             self.setMoveComment()
             self.algorithm.updateMoveText()
             self.algorithm.getPgn4()
         else:
             if self.algorithm.currentMove.name != 'root':
-                self.comment.setText('Enter comment for this move...')
-            self.comment.setStyleSheet("""
-                border: 0px;
-                padding: 4px;
-                border-radius: 0px;
-                background-color: white;
-                text-align: top left;
-                color: grey;
-                font-family: Trebuchet MS;
-                """)
-            self.setMoveComment(False)
-        self.comment.setHidden(False)
+                self.commentField.clear()
+            self.setMoveComment()
 
     def resetComment(self):
         """Resets move comment."""
-        self.comment.setText('')
-        self.comment.setEnabled(False)
         self.commentField.clear()
-        self.comment.setStyleSheet("""
-            border: 0px;
-            padding: 4px;
-            border-radius: 0px;
-            background-color: white;
-            text-align: top left;
-            color: grey;
-            font-family: Trebuchet MS;
-            """)
+        self.commentField.setDisabled(True)
 
     def showComment(self, node):
         """Shows comment for current move."""
+        self.commentField.setDisabled(False)
         if node.comment:
-            self.comment.setText(node.comment)
-            self.comment.setStyleSheet("""
-                border: 0px;
-                padding: 4px;
-                border-radius: 0px;
-                background-color: white;
-                text-align: top left;
-                color: black;
-                font-family: Trebuchet MS;
-                """)
+            self.commentField.setPlainText(node.comment)
         else:
-            if node.name != 'root':
-                self.comment.setText('Enter comment for this move...')
-            self.comment.setStyleSheet("""
-                border: 0px;
-                padding: 4px;
-                border-radius: 0px;
-                background-color: white;
-                text-align: top left;
-                color: grey;
-                font-family: Trebuchet MS;
-                """)
+            self.commentField.clear()
 
     def updateMoveList(self, moveText):
         """Updates move list based on movetext."""
@@ -828,10 +774,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def selectMove(self, key):
         """Makes current move selected in the move list."""
         self.showComment(self.algorithm.moveDict[key])
-        if self.algorithm.currentMove.name != 'root':
-            self.comment.setEnabled(True)
-        else:
-            self.comment.setEnabled(False)
+        # if self.algorithm.currentMove.name != 'root':
+        #     self.comment.setEnabled(True)
+        # else:
+        #     self.comment.setEnabled(False)
         moveIndex = key[0]
         index = 0
         notFound = True
@@ -858,6 +804,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             if row.selectedItems():
                 for item in row.selectedItems():
                     item.setSelected(False)
+        self.resetComment()
 
     def showPreferences(self):
         """Shows preferences window. Settings are passed to the dialog, modified and then returned."""
@@ -879,13 +826,13 @@ class Preferences(QDialog, Ui_Preferences):
 
     def initialize(self):
         """Sets preferences to saved values. Sets default values if no preferences saved."""
-        self.showcoordinates.setChecked(SETTINGS.value('showcoordinates', False))
-        self.showlegalmoves.setChecked(SETTINGS.value('showlegalmoves', False))
-        self.coordinatehelp.setChecked(SETTINGS.value('coordinatehelp', False))
-        self.shownames.setChecked(SETTINGS.value('shownames', False))
-        self.autocolor.setChecked(SETTINGS.value('autocolor', False))
-        self.autorotate.setChecked(SETTINGS.value('autorotate', False))
-        self.chesscom.setChecked(SETTINGS.value('chesscom', False))
+        self.showcoordinates.setChecked(SETTINGS.checkSetting('showcoordinates'))
+        self.showlegalmoves.setChecked(SETTINGS.checkSetting('showlegalmoves'))
+        self.coordinatehelp.setChecked(SETTINGS.checkSetting('coordinatehelp'))
+        self.shownames.setChecked(SETTINGS.checkSetting('shownames'))
+        self.autocolor.setChecked(SETTINGS.checkSetting('autocolor'))
+        self.autorotate.setChecked(SETTINGS.checkSetting('autorotate'))
+        self.chesscom.setChecked(SETTINGS.checkSetting('chesscom'))
 
     def save(self):
         """Saves preferences."""

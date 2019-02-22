@@ -25,11 +25,11 @@ from PyQt5.QtGui import QPainter, QPalette, QColor, QFont, QDrag, QIcon, QCursor
     QBrush
 from collections import deque
 from gui.board import Board
-
+from gui.settings import Settings
 # Load settings
-COM = '4pc'
-APP = '4PlayerChess'
-SETTINGS = QSettings(COM, APP)
+# COM = '4pc'
+# APP = '4PlayerChess'
+SETTINGS = Settings()
 
 
 class View(QWidget):
@@ -123,7 +123,7 @@ class View(QWidget):
 
     def autoRotate(self, rotation):
         """Automatically rotates board after move is made or undone."""
-        if SETTINGS.value('autorotate'):
+        if SETTINGS.checkSetting('autorotate'):
             self.rotateBoard(rotation)
 
     def setCurrentPlayer(self, player):
@@ -210,7 +210,7 @@ class View(QWidget):
         painter.fillRect(self.squareRect(1, 12, self.orientation[0]), QColor('#40c09526'))
         painter.fillRect(self.squareRect(12, 12, self.orientation[0]), QColor('#404e9161'))
         # Show or hide player names
-        if SETTINGS.value('shownames'):
+        if SETTINGS.checkSetting('shownames'):
             self.showNames()
         else:
             self.hideNames()
@@ -220,7 +220,7 @@ class View(QWidget):
                 if not self.maskedSquare == QPoint(file, rank):  # When dragging a piece, don't paint it
                     self.drawPiece(painter, file, rank)
         # Draw coordinates
-        if SETTINGS.value('showcoordinates'):
+        if SETTINGS.checkSetting('showcoordinates'):
             for y in range(14):
                 x = 0 if 2 < y < 11 else 3
                 square = self.squareRect(x, y)
@@ -276,10 +276,10 @@ class View(QWidget):
         # Draw arrows
         self.drawArrows(painter)
         # Draw legal moves
-        if SETTINGS.value('showlegalmoves'):
+        if SETTINGS.checkSetting('showlegalmoves'):
             self.drawLegalMoves(painter)
         # Draw coordinate help
-        if SETTINGS.value('coordinatehelp'):
+        if SETTINGS.checkSetting('coordinatehelp'):
             if self.coordinate:
                 file = ord(self.coordinate[1][0]) - 97
                 rank = int(self.coordinate[1][1:]) - 1
@@ -361,7 +361,7 @@ class View(QWidget):
                 self.arrowColor = QColor('#ff8c00')
                 self.squareColor = QColor('#80ff8c00')
             else:
-                if SETTINGS.value('autocolor'):
+                if SETTINGS.checkSetting('autocolor'):
                     if self.orientation[0] == 'r':
                         self.arrowColor = QColor('#ab272f')
                         self.squareColor = QColor('#80ab272f')
@@ -675,7 +675,7 @@ class View(QWidget):
 
     def showLegalMoves(self):
         """Shows legal moves."""
-        if SETTINGS.value('showlegalmoves'):
+        if SETTINGS.checkSetting('showlegalmoves'):
             fromFile = self.clickedSquare.x()
             fromRank = self.clickedSquare.y()
             identifier = self.board.getData(fromFile, fromRank)
@@ -976,23 +976,6 @@ class View(QWidget):
             self.yellowName.setText(self.yellowName.text() + '\n(' + yellowRating + ')')
         if greenRating != '?':
             self.greenName.setText(self.greenName.text() + '\n(' + greenRating + ')')
-
-
-class Comment(QPushButton):
-    # TODO make comment wrap
-    """Comment label."""
-    def __init__(self):
-        super().__init__()
-        self.setFixedSize(300, 90)
-        self.setStyleSheet("""
-            border: 0px;
-            padding: 4px;
-            border-radius: 0px;
-            background-color: white;
-            text-align: top left;
-            color: grey;
-            font-family: Trebuchet MS;
-            """)
 
 
 class CommentEdit(QPlainTextEdit):

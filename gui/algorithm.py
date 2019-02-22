@@ -940,6 +940,7 @@ class Teams(Algorithm):
         piece = ['P', 'N', 'B', 'R', 'Q', 'K'].index(fromData[1]) + 4
         origin = self.board.square(fromFile, fromRank)
         target = self.board.square(toFile, toRank)
+
         if not (1 << target) & self.board.legalMoves(piece, origin, color):
             return False
 

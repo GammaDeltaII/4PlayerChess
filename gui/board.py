@@ -297,6 +297,13 @@ class Board(QObject):
 
     def legalMoves(self, piece, origin, color):
         """Pseudo-legal moves for piece type."""
+        ####
+        # find king on chessboard on correct color
+        if self.kingInCheck(color):  #  todo
+            pass
+            # print(f"{color} king in check")
+
+        ####
         if color in (RED, YELLOW):
             friendly = self.pieceBB[RED] | self.pieceBB[YELLOW]
         else:
