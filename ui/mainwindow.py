@@ -497,4 +497,5 @@ class Ui_MainWindow(object):
         self.actionReport_Bug.setStatusTip(_translate("MainWindow", "Open GitHub issues page in browser to report a bug or request a feature"))
         self.actionAbout_PyQt.setText(_translate("MainWindow", "About PyQt"))
 
+
 from gui.view import CommentEdit, View

@@ -322,9 +322,39 @@ class Board(QObject):
                 castlingMoves = self.castle[color][KINGSIDE] | self.castle[color][QUEENSIDE]
             legal_moves = (self.kingMoves(origin) | self.maskBlockedCastlingMoves(castlingMoves, origin, color)) & \
                    (~friendly | castlingMoves)
+            if color in [RED, YELLOW]:
+                opp = [GREEN, BLUE]
+            elif color in [GREEN, BLUE]:
+                opp = [RED, YELLOW]
+            else:
+                return
+            operations = {0: self.shiftSW,
+                          1: self.shiftS,
+                          2: self.shiftSE,
+                          3: self.shiftW,
+                          4: self.shiftE,
+                          5: self.shiftNW,
+                          6: self.shiftN,
+                          7: self.shiftNE}
+            # check if new positions are not under another check
+            possible = 0
+            # delete king from board temporary
+            origin = self.pieceSet(color, KING)
+            self.occupiedBB &= ~origin
+            for i in range(8):
+                new_position = operations[i](origin)
+                # todo check for border squares
+                if new_position == 0:
+                    continue
+                new_position_square = self.bitScanForward(new_position)
+                if self.attacked(new_position_square, opp[0]) or self.attacked(new_position_square, opp[1]):
+                    continue
+                possible |= new_position
+            # restore king
+            self.occupiedBB |= origin
+            legal_moves &= possible
         else:
             return -1
-
         # find king on chessboard on correct color
         check, position = self.kingInCheck(color)
         king_square = self.square(position[0], position[1])
@@ -339,45 +369,40 @@ class Board(QObject):
                 opp = [RED, YELLOW]
             else:
                 return
-            postion_of_attacking_pieces = self.attackers(king_square, opp[0]) | self.attackers(king_square, opp[1])
-            print('Attacking pieces')
-            self.printBB256(postion_of_attacking_pieces)
+            position_of_attacking_pieces = self.attackers(king_square, opp[0]) | self.attackers(king_square, opp[1])
             # * compare their position with possible moves
-            first_option = legal_moves & postion_of_attacking_pieces
+            first_option = legal_moves & position_of_attacking_pieces
             if piece == KING:
-                # third -> move with king
+                # second -> move with king
                 # check if new positions are not under another check
-                possible = boardMask
-                for i in range(-1, 2):
-                    new_row = position[0] + i
-                    if new_row < 0 or new_row > 14:
-                        continue
-                    for j in range(-1, 2):
-                        new_column = position[1] + j
-                        if new_column < 0 or new_column > 14:
-                            continue
-                        new_square = self.square(new_row, new_column)
-                        # data = self.getData(new_row, new_column)
-                        if self.attacked(new_square, opp[0]) or self.attacked(new_square, opp[1]):
-                            continue
-                        possible |= self.square(new_row, new_column)
-                print('King moveset')
-                self.printBB256(legal_moves & (first_option & possible))
-                return legal_moves & (first_option & possible)
+                return legal_moves
             else:
-                # second -> block attacking piece
+                # third -> block attacking piece
                 # * search for pieces attacking king
-                pieces = 0  # todo
+                attacking_pieces = self.getSquares(position_of_attacking_pieces)
+                if len(attacking_pieces) >= 2:
+                    # you must move the king, can't capture or block two pieces at once
+                    return 0
+                all_possible_moves = 0
+                for piece in attacking_pieces:
+                    piece_square = self.square(piece[0], piece[1])
+                    # data = self.getData(piece[0], piece[1])
+                    # col, fig = list(data)
+                    # print(col, fig)
+                    ray = self.rayBetween(king_square, piece_square)
+                    if all_possible_moves == 0:
+                        all_possible_moves = ray
+                    else:
+                        all_possible_moves &= ray
+                self.printBB(all_possible_moves)
                 # * get all attacking squares
-                squares = 0  # todo
                 # * compare with all possible moves
-                second_option = legal_moves & squares
+                second_option = legal_moves & all_possible_moves
                 return first_option | second_option
-        # self.printBB256(legal_moves)
         return legal_moves
 
     def attackers(self, square, color):
-        """Returns the set of all pieces attacking and defending the target square."""
+        """Returns the set of all pieces attacking the target square."""
         if color == RED:
             opposite = YELLOW
         elif color == YELLOW:
@@ -395,6 +420,10 @@ class Board(QObject):
         rookMoves = self.maskBlockedSquares(self.rookMoves(square), square)
         attackers |= rookMoves & (self.pieceSet(color, ROOK) | self.pieceSet(color, QUEEN))
         return attackers
+
+    def defenders(self):
+        """Returns the set of all pieces defending the target square."""
+        defenders = 0
         # attackers = self.pawnMoves(square, RED, True) & self.pieceSet(YELLOW, PAWN)
         # attackers |= self.pawnMoves(square, YELLOW, True) & self.pieceSet(RED, PAWN)
         # attackers |= self.pawnMoves(square, BLUE, True) & self.pieceSet(GREEN, PAWN)
@@ -405,7 +434,7 @@ class Board(QObject):
         # attackers |= bishopMoves & (self.pieceBB[BISHOP] | self.pieceBB[QUEEN])
         # rookMoves = self.maskBlockedSquares(self.rookMoves(square), square)
         # attackers |= rookMoves & (self.pieceBB[ROOK] | self.pieceBB[QUEEN])
-        # return attackers
+        return defenders
 
     def pawnMoves(self, origin, color, attacksOnly=False):
         """Pseudo-legal pawn moves."""
@@ -523,7 +552,6 @@ class Board(QObject):
         """Returns ray from king that contains square."""
         kingSquare = self.bitScanForward(self.pieceSet(color, KING))
         return self.rayBetween(kingSquare, square) | self.rayBeyond(kingSquare, square)
-
 
     def attacked(self, square, color):
         """Checks if a square is attacked by a player."""

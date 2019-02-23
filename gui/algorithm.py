@@ -245,8 +245,8 @@ class Algorithm(QObject):
         """Sets board according to FEN4."""
         if not fen4:
             return
-        if self.getFen4(False) == fen4:  # Do not emit fen4Generated signal
-            return
+        # if self.getFen4(False) == fen4:  # Do not emit fen4Generated signal
+        #     return
         self.setupBoard()
         self.board.parseFen4(fen4)
         self.setResult(self.NoResult)

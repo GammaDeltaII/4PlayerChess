@@ -774,10 +774,6 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def selectMove(self, key):
         """Makes current move selected in the move list."""
         self.showComment(self.algorithm.moveDict[key])
-        # if self.algorithm.currentMove.name != 'root':
-        #     self.comment.setEnabled(True)
-        # else:
-        #     self.comment.setEnabled(False)
         moveIndex = key[0]
         index = 0
         notFound = True
