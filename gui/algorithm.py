@@ -36,6 +36,7 @@ class Algorithm(QObject):
     boardChanged = pyqtSignal(Board)
     gameOver = pyqtSignal(str)
     currentPlayerChanged = pyqtSignal(str)
+    newGameCreated = pyqtSignal()
     fen4Generated = pyqtSignal(str)
     pgn4Generated = pyqtSignal(str)
     moveTextChanged = pyqtSignal(str)
@@ -247,6 +248,7 @@ class Algorithm(QObject):
             return
         # if self.getFen4(False) == fen4:  # Do not emit fen4Generated signal
         #     return
+        self.newGameCreated.emit()
         self.setupBoard()
         self.board.parseFen4(fen4)
         self.setResult(self.NoResult)
@@ -976,6 +978,15 @@ class Teams(Algorithm):
 
         # Store FEN4 in current node
         self.currentMove.fen4 = fen4
+
+        #################
+        # todo better checkmate system
+        self.board._about_to_get_checkmated = [False]*4
+        for color in range(4):
+            if self.board.kingInCheckmate(color, self.currentPlayer):
+                color_name = ['red', 'blue', 'yellow', 'green']
+                print(f'{color_name[color]} lost!')
+        #################
 
         return True
 

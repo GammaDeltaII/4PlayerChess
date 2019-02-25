@@ -137,3 +137,11 @@ https://github.com/GammaDeltaII/4PlayerChess
 
 ## License
 This project is licensed under the GNU General Public License v3.0. See the [COPYING](COPYING.md) file for details.
+
+## Todo
+* <s>checkmate support</s>
+* <s>default name for player name when leaving blank space</s>
+* <s>reset board does not reset rotation of board to default</s>
+* <s>unchecking auto-rotate does not return to default position</s>
+* <s>colors not changing after rotation</s>
+* repair castling

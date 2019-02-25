@@ -132,6 +132,11 @@ class View(QWidget):
             return
         self.currentPlayer = player
 
+    def resetRotation(self, current_player='r'):
+        """Reset board rotation to default position"""
+        while self.orientation[0] != current_player:
+            self.rotateBoard(-1)
+
     def setBoard(self, board):
         """Updates board, if changed. Disconnects signals from old board and connects them to new board."""
         if self.board == board:
@@ -375,8 +380,10 @@ class View(QWidget):
                         self.arrowColor = QColor('#3a7d4d')
                         self.squareColor = QColor('#803a7d4d')
                 else:
-                    self.arrowColor = QColor('#ff8c00')
-                    self.squareColor = QColor('#80ff8c00')
+                    # self.arrowColor = QColor('#ff8c00')
+                    # self.squareColor = QColor('#80ff8c00')
+                    self.arrowColor = QColor('#000')
+                    self.squareColor = QColor('#666')
             origin = self.squareCenter(self.arrowStart)
             target = self.squareCenter(arrowEnd)
             if origin == target:
@@ -909,6 +916,7 @@ class View(QWidget):
         name.setHidden(True)
         nameEdit.setHidden(False)
         nameEdit.setFocus(True)
+        nameEdit.setText(name.text())
 
     def setPlayerName(self, name):
         """Updates player name label and deactivates player name edit field."""
@@ -916,7 +924,7 @@ class View(QWidget):
         s = name.text().split('\n')
         if len(s) == 2:
             rating = s[-1]
-            n = nameEdit.text().split(' ')
+            n = nameEdit.text().split('\n')
             if len(n) > 1:
                 e = n[-1].strip('()')
                 if e.isdigit():
@@ -928,7 +936,12 @@ class View(QWidget):
                 name.setText(' '.join(n) + '\n' + rating)
         else:
             rating = None
-            n = nameEdit.text().split(' ')
+            n = nameEdit.text().strip().split(' ')
+            if n[0] == "":
+                name.setHidden(False)
+                nameEdit.setHidden(True)
+                nameEdit.setFocus(False)
+                return
             if len(n) > 1:
                 e = n[-1].strip('()')
                 if e.isdigit():
