@@ -849,7 +849,6 @@ class Preferences(QDialog, Ui_Preferences):
         SETTINGS.setValue('coordinatehelp', self.coordinatehelp.isChecked())
         SETTINGS.setValue('shownames', self.shownames.isChecked())
         SETTINGS.setValue('autocolor', self.autocolor.isChecked())
-        # todo rotate board to current player, if autorotate is selected
         SETTINGS.setValue('autorotate', self.autorotate.isChecked())
         SETTINGS.setValue('chesscom', self.chesscom.isChecked())
         self.savedPreferences.emit(self.autorotate.isChecked())

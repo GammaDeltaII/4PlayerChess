@@ -297,8 +297,16 @@ class Algorithm(QObject):
                     moveString[2] = 'x'
         else:
             if moveString != 'O-O' and moveString != 'O-O-O':
-                moveString[0] = moveString[0][1]
-                moveString.insert(2, '-')
+                # castling moves by castling square
+                shortCastle = ['rK h1 j1', 'bK a8 a10', 'yK g14 e14', 'gK n7 n5']
+                longCastle = ['rK h1 f1', 'bK a8 a6', 'yK g14 i14', 'gK n7 n9']
+                if ' '.join(moveString) in shortCastle:
+                    moveString = 'O-O'
+                elif ' '.join(moveString) in longCastle:
+                    moveString = 'O-O-O'
+                else:
+                    moveString[0] = moveString[0][1]
+                    moveString.insert(2, '-')
         moveString = ''.join(moveString)
         return moveString
 
@@ -368,7 +376,14 @@ class Algorithm(QObject):
                 moveString[2] = 'x'
         else:
             if moveString != 'O-O' and moveString != 'O-O-O':
-                moveString[0] = moveString[0][1]
+                shortCastle = ['rK h1 j1', 'bK a8 a10', 'yK g14 e14', 'gK n7 n5']
+                longCastle = ['rK h1 f1', 'bK a8 a6', 'yK g14 i14', 'gK n7 n9']
+                if ' '.join(moveString) in shortCastle:
+                    moveString = 'O-O'
+                elif ' '.join(moveString) in longCastle:
+                    moveString = 'O-O-O'
+                else:
+                    moveString[0] = moveString[0][1]
         moveString = ''.join(moveString)
         return moveString
 
@@ -755,47 +770,47 @@ class Algorithm(QObject):
                     self.cannotReadPgn4.emit()
                     return False
                 movetext += line + ' '
-            # Generate game from movetext
-            self.newGame()
-            tokens = self.split_(movetext)
-            for token in tokens:
-                if token[0] == '(' and len(token) > 1:
-                    index = tokens.index(token)
-                    tokens.insert(index + 1, token[1:])
-                    tokens[index] = token[0]
-            roots = []
-            prev = None
-            i = 0
-            for token in tokens:
-                try:
-                    next_ = tokens[i + 1]
-                except IndexError:
-                    next_ = None
-                if (token[0].isdigit() and token[-1] == '.') or token in '..RT#':
-                    pass
-                elif token[0] == '{':
-                    # Comment
-                    self.currentMove.comment = token[1:-1].strip()
-                elif token == '(':
-                    # Next move is variation
-                    if not prev == ')':
-                        self.prevMove()
-                        roots.append(self.currentMove)
-                    else:
-                        roots.append(self.currentMove)
-                elif token == ')':
-                    # End of variation
-                    root = roots.pop()
-                    while self.currentMove.name != root.name:
-                        self.prevMove()
-                    if next_ != '(':
-                        # Continue with previous line
-                        self.nextMove()
+        # Generate game from movetext
+        self.newGame()
+        tokens = self.split_(movetext)
+        for token in tokens:
+            if token[0] == '(' and len(token) > 1:
+                index = tokens.index(token)
+                tokens.insert(index + 1, token[1:])
+                tokens[index] = token[0]
+        roots = []
+        prev = None
+        i = 0
+        for token in tokens:
+            try:
+                next_ = tokens[i + 1]
+            except IndexError:
+                next_ = None
+            if (token[0].isdigit() and token[-1] == '.') or token in '..RT#':
+                pass
+            elif token[0] == '{':
+                # Comment
+                self.currentMove.comment = token[1:-1].strip()
+            elif token == '(':
+                # Next move is variation
+                if not prev == ')':
+                    self.prevMove()
+                    roots.append(self.currentMove)
                 else:
-                    fromFile, fromRank, toFile, toRank = self.fromChesscomMove(token, self.currentPlayer)
-                    self.makeMove(fromFile, fromRank, toFile, toRank)
-                prev = token
-                i += 1
+                    roots.append(self.currentMove)
+            elif token == ')':
+                # End of variation
+                root = roots.pop()
+                while self.currentMove.name != root.name:
+                    self.prevMove()
+                if next_ != '(':
+                    # Continue with previous line
+                    self.nextMove()
+            else:
+                fromFile, fromRank, toFile, toRank = self.fromChesscomMove(token, self.currentPlayer)
+                self.makeMove(fromFile, fromRank, toFile, toRank)
+            prev = token
+            i += 1
         # Set game position to CurrentMove ("ply-variation-move")
         self.firstMove()
         currentMove = [int(c) for c in currentMove.split('-')]
@@ -937,7 +952,6 @@ class Teams(Algorithm):
         if self.currentPlayer == self.Green and fromData[0] != 'g':
             return False
 
-        # TODO check if move is truly legal (checks)
         color = ['r', 'b', 'y', 'g'].index(fromData[0])
         piece = ['P', 'N', 'B', 'R', 'Q', 'K'].index(fromData[1]) + 4
         origin = self.board.square(fromFile, fromRank)
@@ -980,8 +994,8 @@ class Teams(Algorithm):
         self.currentMove.fen4 = fen4
 
         #################
-        # todo better checkmate system
-        self.board._about_to_get_checkmated = [False]*4
+        # todo get better indicators, that someone got checkmated
+        self.board.canPreventCheckmate = [False]*4
         for color in range(4):
             if self.board.kingInCheckmate(color, self.currentPlayer):
                 color_name = ['red', 'blue', 'yellow', 'green']
