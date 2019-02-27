@@ -24,11 +24,12 @@ from collections import deque
 from datetime import datetime
 from re import split
 from gui.board import Board
+from gui.settings import Settings
 
 # Load settings
 COM = '4pc'
 APP = '4PlayerChess'
-SETTINGS = QSettings(COM, APP)
+SETTINGS = Settings()
 
 
 class Algorithm(QObject):
@@ -189,7 +190,7 @@ class Algorithm(QObject):
 
     def newGame(self):
         """Initializes board and sets starting position."""
-        if SETTINGS.value('chesscom'):
+        if SETTINGS.checkSetting('chesscom'):
             fen4 = self.chesscomStartFen4
         else:
             fen4 = self.startFen4
@@ -198,18 +199,19 @@ class Algorithm(QObject):
 
     def getFen4(self, emitSignal=True):
         """Gets FEN4 from current board state."""
-        fen4 = self.board.getFen4()
-        # Append character for current player
-        fen4 += self.currentPlayer + ' '
-        fen4 += self.board.castlingAvailability() + ' '
-        fen4 += '- '  # En passant target square, n/a
-        fen4 += str(self.moveNumber) + ' '  # Number of quarter-moves
-        fen4 += str(self.moveNumber // 4 + 1)  # Number of full moves, starting from 1
-        if SETTINGS.value('chesscom'):
+        if SETTINGS.checkSetting('chesscom'):
             chesscomPrefix = self.currentPlayer.upper() + '-0,0,0,0' + \
                              self.toChesscomCastling(self.board.castlingAvailability()) + '-0,0,0,0-' + \
                              str(self.moveNumber) + '-'
             fen4 = chesscomPrefix + self.board.getChesscomFen4()
+        else:
+            fen4 = self.board.getFen4()
+            # Append character for current player
+            fen4 += self.currentPlayer + ' '
+            fen4 += self.board.castlingAvailability() + ' '
+            fen4 += '- '  # En passant target square, n/a
+            fen4 += str(self.moveNumber) + ' '  # Number of quarter-moves
+            fen4 += str(self.moveNumber // 4 + 1)  # Number of full moves, starting from 1
         if emitSignal:
             self.fen4Generated.emit(fen4)
         return fen4
@@ -252,7 +254,7 @@ class Algorithm(QObject):
         self.setupBoard()
         self.board.parseFen4(fen4)
         self.setResult(self.NoResult)
-        if SETTINGS.value('chesscom'):
+        if SETTINGS.checkSetting('chesscom'):
             self.setCurrentPlayer(fen4[0].lower())
             self.moveNumber = 0
             self.fenMoveNumber = 1
@@ -564,7 +566,7 @@ class Algorithm(QObject):
         pgn4 += '[TimeControl "G/1 d15"]\n'  # 1-minute game with 15 seconds delay per move
         pgn4 += '[PlyCount "' + str(self.moveNumber) + '"]\n'  # Total number of quarter-moves
         startFen4 = self.currentMove.getRoot().fen4
-        if SETTINGS.value('chesscom'):
+        if SETTINGS.checkSetting('chesscom'):
             if startFen4 != self.chesscomStartFen4:
                 pgn4 += '[SetUp "1"]\n'
                 pgn4 += '[StartFen4 "' + startFen4 + '"]\n'
@@ -576,7 +578,7 @@ class Algorithm(QObject):
         pgn4 += '[CurrentPosition "' + self.getFen4() + '"]\n\n'
 
         # Movetext
-        if SETTINGS.value('chesscom'):
+        if SETTINGS.checkSetting('chesscom'):
             pgn4 = pgn4[:-1]  # remove newline
             pgn4 += self.chesscomMoveText
         else:
@@ -994,7 +996,7 @@ class Teams(Algorithm):
         self.currentMove.fen4 = fen4
 
         #################
-        # todo get better indicators, that someone got checkmated
+        # TODO grayout player that got checkmated
         self.board.canPreventCheckmate = [False]*4
         for color in range(4):
             if self.board.kingInCheckmate(color, self.currentPlayer):

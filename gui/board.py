@@ -19,11 +19,11 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from PyQt5.QtCore import QObject, pyqtSignal, QSettings
-
+from gui.settings import Settings
 # Load settings
 COM = '4pc'
 APP = '4PlayerChess'
-SETTINGS = QSettings(COM, APP)
+SETTINGS = Settings()
 
 RED, BLUE, YELLOW, GREEN, PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING = range(10)
 
@@ -59,6 +59,7 @@ class Board(QObject):
         self.pieceBB = []
         self.emptyBB = 0
         self.occupiedBB = 0
+        self.castlingState = []
         self.castlingSquares = []
         self.rooksSquares = []
         self.canPreventCheckmate = [False]*4
@@ -287,12 +288,13 @@ class Board(QObject):
             blockers &= blockers - 1
         return moves
 
-    def showAvailableCastlingMoves(self, moves, origin, color, rooks):
+    def showAvailableCastlingMoves(self, moves, origin, color):
         """Return available castling moves for king of given color."""
-        # castle is blocked when pieces are blocking or when squares around king are under attack
+        # if king in check, cannot castle
         if moves == 0:
             return 0
         sides = [KINGSIDE, QUEENSIDE]
+        # check if castle was already done
         if color in [RED, YELLOW]:
             opp = [GREEN, BLUE]
         elif color in [GREEN, BLUE]:
@@ -304,12 +306,16 @@ class Board(QObject):
             teammate_color -= 4
         final_mask = 0
         for side in sides:
-            if moves[side] == 0:
+            # check if castle available for this side
+            if moves[side] < 1:
                 continue
-            rookSquare = self.bitScanForward(rooks[side])
+            # check if any ally pieces stand between king and rook
+            rookSquare = self.bitScanForward(self.rooksSquares[color][side])
             if self.rayBetween(origin, rookSquare) & (self.pieceBB[color] | self.pieceBB[teammate_color]):
                 continue
-            targetSquare = self.bitScanForward(moves[side])
+            # check if castling square and square between king and this square are under attack
+
+            targetSquare = self.bitScanForward(self.castlingSquares[color][side])
             broken = False
             for square in self.getSquares(self.rayBetween(origin, targetSquare) | (1 << targetSquare)):
                 square = self.square(square[0], square[1])
@@ -318,11 +324,12 @@ class Board(QObject):
                     break
             if broken:
                 continue
-            final_mask |= (moves[side] | rooks[side])
+            # if not, add castling by moving into rook square or castling square
+            final_mask |= (self.castlingSquares[color][side] | self.rooksSquares[color][side])
         return final_mask
 
     def legalMoves(self, piece, origin, color):
-        """Pseudo-legal moves for piece type."""
+        """Return all legal moves for piece type."""
         if color in (RED, YELLOW):
             friendly = self.pieceBB[RED] | self.pieceBB[YELLOW]
         else:
@@ -351,8 +358,8 @@ class Board(QObject):
             if self.kingInCheck(color)[0]:
                 castlingMoves = 0
             else:
-                castlingMoves = self.castlingSquares[color]
-            rookSquares = self.rooksSquares[color]
+                castlingMoves = self.castlingState[color]
+            # rookSquares = self.rooksSquares[color]
             legal_moves = self.kingMoves(origin) & ~friendly
             if color in [RED, YELLOW]:
                 opp = [GREEN, BLUE]
@@ -386,7 +393,8 @@ class Board(QObject):
 
             legal_moves &= possible
             # all legal moves without castling
-            legal_moves |= self.showAvailableCastlingMoves(castlingMoves, origin, color, rookSquares)
+            # legal_moves |= self.showAvailableCastlingMoves(castlingMoves, origin, color, rookSquares)
+            legal_moves |= self.showAvailableCastlingMoves(castlingMoves, origin, color)
         else:
             return -1
         # find king on chessboard on correct color
@@ -472,7 +480,7 @@ class Board(QObject):
                     if_can_block = legal_moves & ray
                     if if_can_block != 0:
                         all_possible_moves |= if_can_block
-            # self.printBB(all_possible_moves)
+
             king_square = self.bitScanForward(origin)
             position_of_attacking_pieces = self.attackers(king_square, opp[0]) | self.attackers(king_square, opp[1])
 
@@ -488,7 +496,7 @@ class Board(QObject):
                     all_possible_moves2 = ray
                 else:
                     all_possible_moves2 &= ray
-            # self.printBB(all_possible_moves2)
+
             second_option = legal_moves & all_possible_moves2
             return first_option | second_option | all_possible_moves
 
@@ -862,6 +870,8 @@ class Board(QObject):
         self.pieceBB = [0] * 10
         self.emptyBB = 0
         self.occupiedBB = 0
+        # if 1, can castle, else cannot castle
+        self.castlingState = [[1]*2 for _ in range(4)]
         self.castlingSquares = [[1 << self.square(5, 0), 1 << self.square(9, 0)],
                        [1 << self.square(0, 5), 1 << self.square(0, 9)],
                        [1 << self.square(8, 13), 1 << self.square(4, 13)],
@@ -888,6 +898,7 @@ class Board(QObject):
     def makeMove(self, fromFile, fromRank, toFile, toRank):
         """Moves piece from square (fromFile, fromRank) to square (toFile, toRank)."""
         # check if castling by castling square
+        # if yes, than register move as castling by moving into rook square
         if (fromFile, fromRank, toFile, toRank) == (7, 0, 9, 0):  # red kingside
             toFile += 1
         elif (fromFile, fromRank, toFile, toRank) == (0, 7, 0, 9):  # blue kingside
@@ -907,90 +918,93 @@ class Board(QObject):
 
         char = self.getData(fromFile, fromRank)
         captured = self.getData(toFile, toRank)
-        # If castling move, move king and rook to castling squares instead of ordinary move
+
         move = char + ' ' + chr(fromFile + 97) + str(fromRank + 1) + ' ' + \
                captured + ' ' + chr(toFile + 97) + str(toRank + 1)
+
+        # If castling move, move king and rook to castling squares instead of ordinary move
         if move == 'rK h1 rR k1':  # kingside castle red by rook square
             self.setData(fromFile + 2, fromRank, char)
             self.setData(toFile - 2, toRank, captured)
             self.setData(fromFile, fromRank, ' ')
             self.setData(toFile, toRank, ' ')
-            self.castlingSquares[RED][KINGSIDE] = 0
+            self.castlingState[RED][KINGSIDE] -= 1
         elif move == 'yK g14 yR d14':  # kingside castle yellow by rook square
             self.setData(fromFile - 2, fromRank, char)
             self.setData(toFile + 2, toRank, captured)
             self.setData(fromFile, fromRank, ' ')
             self.setData(toFile, toRank, ' ')
-            self.castlingSquares[YELLOW][KINGSIDE] = 0
+            self.castlingState[YELLOW][KINGSIDE] -= 1
         elif move == 'bK a8 bR a11':  # kingside castle blue by rook square
             self.setData(fromFile, fromRank + 2, char)
             self.setData(toFile, toRank - 2, captured)
             self.setData(fromFile, fromRank, ' ')
             self.setData(toFile, toRank, ' ')
-            self.castlingSquares[BLUE][KINGSIDE] = 0
+            self.castlingState[BLUE][KINGSIDE] -= 1
         elif move == 'gK n7 gR n4':  # kingside castle green by rook square
             self.setData(fromFile, fromRank - 2, char)
             self.setData(toFile, toRank + 2, captured)
             self.setData(fromFile, fromRank, ' ')
             self.setData(toFile, toRank, ' ')
-            self.castlingSquares[GREEN][KINGSIDE] = 0
+            self.castlingState[GREEN][KINGSIDE] -= 1
         elif move == 'rK h1 rR d1':  # queenside castle red
             self.setData(fromFile - 2, fromRank, char)
             self.setData(toFile + 3, toRank, captured)
             self.setData(fromFile, fromRank, ' ')
             self.setData(toFile, toRank, ' ')
-            self.castlingSquares[RED][QUEENSIDE] = 0
+            self.castlingState[RED][QUEENSIDE] -= 1
         elif move == 'yK g14 yR k14':  # queenside castle yellow
             self.setData(fromFile + 2, fromRank, char)
             self.setData(toFile - 3, toRank, captured)
             self.setData(fromFile, fromRank, ' ')
             self.setData(toFile, toRank, ' ')
-            self.castlingSquares[YELLOW][QUEENSIDE] = 0
+            self.castlingState[YELLOW][QUEENSIDE] -= 1
         elif move == 'bK a8 bR a4':  # queenside castle blue
             self.setData(fromFile, fromRank - 2, char)
             self.setData(toFile, toRank + 3, captured)
             self.setData(fromFile, fromRank, ' ')
             self.setData(toFile, toRank, ' ')
-            self.castlingSquares[BLUE][QUEENSIDE] = 0
+            self.castlingState[BLUE][QUEENSIDE] -= 1
         elif move == 'gK n7 gR n11':  # queenside castle green
             self.setData(fromFile, fromRank + 2, char)
             self.setData(toFile, toRank - 3, captured)
             self.setData(fromFile, fromRank, ' ')
             self.setData(toFile, toRank, ' ')
-            self.castlingSquares[GREEN][QUEENSIDE] = 0
+            self.castlingState[GREEN][QUEENSIDE] -= 1
         else:  # regular move
             # move piece to target square
             self.setData(toFile, toRank, char)
             self.setData(fromFile, fromRank, ' ')
             # If king move or rook move from original square, remove castling availability
             if char == 'rK' and (fromFile, fromRank) == (7, 0):
-                self.castlingSquares[RED][KINGSIDE] = 0
-                self.castlingSquares[RED][QUEENSIDE] = 0
+                self.castlingState[RED][KINGSIDE] -= 1
+                self.castlingState[RED][QUEENSIDE] -= 1
             if char == 'rR' and (fromFile, fromRank) == (10, 0):
-                self.castlingSquares[RED][KINGSIDE] = 0
+                self.castlingState[RED][KINGSIDE] -= 1
             if char == 'rR' and (fromFile, fromRank) == (3, 0):
-                self.castlingSquares[RED][QUEENSIDE] = 0
+                self.castlingState[RED][QUEENSIDE] -= 1
             if char == 'bK' and (fromFile, fromRank) == (0, 7):
-                self.castlingSquares[BLUE][KINGSIDE] = 0
-                self.castlingSquares[BLUE][QUEENSIDE] = 0
+                self.castlingState[BLUE][KINGSIDE] -= 1
+                self.castlingState[BLUE][QUEENSIDE] -= 1
             if char == 'bR' and (fromFile, fromRank) == (0, 10):
-                self.castlingSquares[BLUE][KINGSIDE] = 0
+                self.castlingState[BLUE][KINGSIDE] -= 1
             if char == 'bR' and (fromFile, fromRank) == (0, 3):
                 self.castlingSquares[BLUE][QUEENSIDE] = 0
+                self.castlingState[BLUE][QUEENSIDE] -= 1
             if char == 'yK' and (fromFile, fromRank) == (6, 13):
-                self.castlingSquares[YELLOW][KINGSIDE] = 0
-                self.castlingSquares[YELLOW][QUEENSIDE] = 0
+                self.castlingState[YELLOW][KINGSIDE] -= 1
+                self.castlingState[YELLOW][QUEENSIDE] -= 1
             if char == 'yR' and (fromFile, fromRank) == (3, 13):
-                self.castlingSquares[YELLOW][KINGSIDE] = 0
+                self.castlingState[YELLOW][KINGSIDE] -= 1
             if char == 'yR' and (fromFile, fromRank) == (10, 13):
-                self.castlingSquares[YELLOW][QUEENSIDE] = 0
+                self.castlingState[YELLOW][QUEENSIDE] -= 1
             if char == 'gK' and (fromFile, fromRank) == (13, 6):
-                self.castlingSquares[GREEN][KINGSIDE] = 0
-                self.castlingSquares[GREEN][QUEENSIDE] = 0
+                self.castlingState[GREEN][KINGSIDE] -= 1
+                self.castlingState[GREEN][QUEENSIDE] -= 1
             if char == 'gR' and (fromFile, fromRank) == (13, 3):
-                self.castlingSquares[GREEN][KINGSIDE] = 0
+                self.castlingState[GREEN][KINGSIDE] -= 1
             if char == 'gR' and (fromFile, fromRank) == (13, 10):
-                self.castlingSquares[GREEN][QUEENSIDE] = 0
+                self.castlingState[GREEN][QUEENSIDE] -= 1
         # Update bitboards
         piece, color = self.getPieceColor(char)
         fromBB = 1 << self.square(fromFile, fromRank)
@@ -1057,6 +1071,24 @@ class Board(QObject):
                 self.pieceBB[piece_] ^= toBB
                 self.occupiedBB ^= toBB
                 self.emptyBB ^= toBB
+            elif piece_ == ROOK:
+                # if your rook was taken, delete castling on this side
+                if (toFile, toRank) == (10, 0):
+                    self.castlingState[RED][KINGSIDE] -= 1
+                elif (toFile, toRank) == (3, 0):
+                    self.castlingState[RED][QUEENSIDE] -= 1
+                elif (toFile, toRank) == (0, 10):
+                    self.castlingState[BLUE][KINGSIDE] -= 1
+                elif (toFile, toRank) == (0, 3):
+                    self.castlingState[BLUE][QUEENSIDE] -= 1
+                elif (toFile, toRank) == (3, 13):
+                    self.castlingState[YELLOW][KINGSIDE] -= 1
+                elif (toFile, toRank) == (10, 13):
+                    self.castlingState[YELLOW][QUEENSIDE] -= 1
+                elif (toFile, toRank) == (13, 3):
+                    self.castlingState[GREEN][KINGSIDE] -= 1
+                elif (toFile, toRank) == (13, 10):
+                    self.castlingState[GREEN][QUEENSIDE] -= 1
             # Remove captured piece
             self.pieceBB[color_] ^= toBB
             self.pieceBB[piece_] ^= toBB
@@ -1068,40 +1100,93 @@ class Board(QObject):
     def undoMove(self, fromFile, fromRank, toFile, toRank, char, captured):
         """Takes back move and restores captured piece."""
         # Remove king and rook from castling squares
+        if (fromFile, fromRank, toFile, toRank) == (7, 0, 9, 0):  # red kingside
+            toFile += 1
+            captured = 'rR'
+        elif (fromFile, fromRank, toFile, toRank) == (0, 7, 0, 9):  # blue kingside
+            toRank += 1
+            captured = 'bR'
+        elif (fromFile, fromRank, toFile, toRank) == (6, 13, 4, 13):  # yellow kingside
+            toFile -= 1
+            captured = 'yR'
+        elif (fromFile, fromRank, toFile, toRank) == (13, 6, 13, 4):  # green kingside
+            toRank -= 1
+            captured = 'gR'
+        elif (fromFile, fromRank, toFile, toRank) == (7, 0, 5, 0):  # red queenside
+            toFile -= 2
+            captured = 'rR'
+        elif (fromFile, fromRank, toFile, toRank) == (0, 7, 0, 5):  # blue queenside
+            toRank -= 2
+            captured = 'bR'
+        elif (fromFile, fromRank, toFile, toRank) == (6, 13, 8, 13):  # yellow queenside
+            toFile += 2
+            captured = 'yR'
+        elif (fromFile, fromRank, toFile, toRank) == (13, 6, 13, 8):  # green queenside
+            toRank += 2
+            captured = 'gR'
         move = char + ' ' + chr(fromFile + 97) + str(fromRank + 1) + ' ' + \
                captured + ' ' + chr(toFile + 97) + str(toRank + 1)
         if move == 'rK h1 rR k1':  # kingside castle red
             self.setData(fromFile + 2, fromRank, ' ')
             self.setData(toFile - 2, toRank, ' ')
-            self.castlingSquares[RED][KINGSIDE] = 1 << self.square(10, 0)
+            self.castlingState[RED][KINGSIDE] += 1
         elif move == 'yK g14 yR d14':  # kingside castle yellow
             self.setData(fromFile - 2, fromRank, ' ')
             self.setData(toFile + 2, toRank, ' ')
-            self.castlingSquares[YELLOW][KINGSIDE] = 1 << self.square(3, 13)
+            self.castlingState[YELLOW][KINGSIDE] += 1
         elif move == 'bK a8 bR a11':  # kingside castle blue
             self.setData(fromFile, fromRank + 2, ' ')
             self.setData(toFile, toRank - 2, ' ')
-            self.castlingSquares[BLUE][KINGSIDE] = 1 << self.square(0, 10)
+            self.castlingState[BLUE][KINGSIDE] += 1
         elif move == 'gK n7 gR n4':  # kingside castle green
             self.setData(fromFile, fromRank - 2, ' ')
             self.setData(toFile, toRank + 2, ' ')
-            self.castlingSquares[GREEN][KINGSIDE] = 1 << self.square(13, 3)
+            self.castlingState[GREEN][KINGSIDE] += 1
         elif move == 'rK h1 rR d1':  # queenside castle red
             self.setData(fromFile - 2, fromRank, ' ')
             self.setData(toFile + 3, toRank, ' ')
-            self.castlingSquares[RED][QUEENSIDE] = 1 << self.square(3, 0)
+            self.castlingState[RED][QUEENSIDE] += 1
         elif move == 'yK g14 yR k14':  # queenside castle yellow
             self.setData(fromFile + 2, fromRank, ' ')
             self.setData(toFile - 3, toRank, ' ')
-            self.castlingSquares[YELLOW][QUEENSIDE] = 1 << self.square(10, 13)
+            self.castlingState[YELLOW][QUEENSIDE] += 1
         elif move == 'bK a8 bR a4':  # queenside castle blue
             self.setData(fromFile, fromRank - 2, ' ')
             self.setData(toFile, toRank + 3, ' ')
-            self.castlingSquares[BLUE][QUEENSIDE] = 1 << self.square(0, 3)
+            self.castlingState[BLUE][QUEENSIDE] += 1
         elif move == 'gK n7 gR n11':  # queenside castle green
             self.setData(fromFile, fromRank + 2, ' ')
             self.setData(toFile, toRank - 3, ' ')
-            self.castlingSquares[GREEN][QUEENSIDE] = 1 << self.square(13, 10)
+            self.castlingState[GREEN][QUEENSIDE] += 1
+        else:
+            if char == 'rK' and (fromFile, fromRank) == (7, 0):
+                self.castlingState[RED][KINGSIDE] += 1
+                self.castlingState[RED][QUEENSIDE] += 1
+            if char == 'rR' and (fromFile, fromRank) == (10, 0):
+                self.castlingState[RED][KINGSIDE] += 1
+            if char == 'rR' and (fromFile, fromRank) == (3, 0):
+                self.castlingState[RED][QUEENSIDE] += 1
+            if char == 'bK' and (fromFile, fromRank) == (0, 7):
+                self.castlingState[BLUE][KINGSIDE] += 1
+                self.castlingState[BLUE][QUEENSIDE] += 1
+            if char == 'bR' and (fromFile, fromRank) == (0, 10):
+                self.castlingState[BLUE][KINGSIDE] += 1
+            if char == 'bR' and (fromFile, fromRank) == (0, 3):
+                self.castlingState[BLUE][QUEENSIDE] += 1
+            if char == 'yK' and (fromFile, fromRank) == (6, 13):
+                self.castlingState[YELLOW][KINGSIDE] += 1
+                self.castlingState[YELLOW][QUEENSIDE] += 1
+            if char == 'yR' and (fromFile, fromRank) == (3, 13):
+                self.castlingState[YELLOW][KINGSIDE] += 1
+            if char == 'yR' and (fromFile, fromRank) == (10, 13):
+                self.castlingState[YELLOW][QUEENSIDE] += 1
+            if char == 'gK' and (fromFile, fromRank) == (13, 6):
+                self.castlingState[GREEN][KINGSIDE] += 1
+                self.castlingState[GREEN][QUEENSIDE] += 1
+            if char == 'gR' and (fromFile, fromRank) == (13, 3):
+                self.castlingState[GREEN][KINGSIDE] += 1
+            if char == 'gR' and (fromFile, fromRank) == (13, 10):
+                self.castlingState[GREEN][QUEENSIDE] += 1
         # Move piece back and restore captured piece
         self.setData(fromFile, fromRank, char)
         self.setData(toFile, toRank, captured)
@@ -1115,19 +1200,83 @@ class Board(QObject):
         self.pieceBB[piece] ^= fromToBB
         self.occupiedBB ^= fromToBB
         self.emptyBB ^= fromToBB
+
         if captured != ' ':
             piece_, color_ = self.getPieceColor(captured)
             if piece == KING and piece_ == ROOK and color == color_:
-                # Remove king and rook from castling squares
-                castlingSquares = self.rayBetween(self.square(fromFile, fromRank), self.square(toFile, toRank))
-                self.pieceBB[color] &= ~castlingSquares
-                self.pieceBB[piece_] &= ~castlingSquares
-                self.pieceBB[piece] &= ~castlingSquares
+                # Undo king move
+                self.pieceBB[color] ^= fromToBB
+                self.pieceBB[piece] ^= fromToBB
+                self.occupiedBB ^= fromToBB
+                self.emptyBB ^= fromToBB
+
+                # Move king and rook to proper squares
+                pieceToBB = 1 << self.square(fromFile, fromRank)
+                pieceToBB_ = 1 << self.square(toFile, toRank)
+                if color == RED and toFile > fromFile:  # kingside castle red
+                    pieceFromBB = 1 << self.square(toFile - 1, toRank)
+                    pieceFromBB_ = 1 << self.square(toFile - 2, toRank)
+                elif color == YELLOW and toFile < fromFile:  # kingside castle yellow
+                    pieceFromBB = 1 << self.square(toFile + 1, toRank)
+                    pieceFromBB_ = 1 << self.square(toFile + 2, toRank)
+                elif color == BLUE and toRank > fromRank:  # kingside castle blue
+                    pieceFromBB = 1 << self.square(toFile, toRank - 1)
+                    pieceFromBB_ = 1 << self.square(toFile, toRank - 2)
+                elif color == GREEN and toRank < fromRank:  # kingside castle green
+                    pieceFromBB = 1 << self.square(toFile, toRank + 1)
+                    pieceFromBB_ = 1 << self.square(toFile, toRank + 2)
+                elif color == RED and toFile < fromFile:  # queenside castle red
+                    pieceFromBB = 1 << self.square(toFile + 2, toRank)
+                    pieceFromBB_ = 1 << self.square(toFile + 3, toRank)
+                elif color == YELLOW and toFile > fromFile:  # queenside castle yellow
+                    pieceFromBB = 1 << self.square(toFile - 2, toRank)
+                    pieceFromBB_ = 1 << self.square(toFile - 3, toRank)
+                elif color == BLUE and toRank < fromRank:  # queenside castle blue
+                    pieceFromBB = 1 << self.square(toFile, toRank + 2)
+                    pieceFromBB_ = 1 << self.square(toFile, toRank + 3)
+                elif color == GREEN and toRank > fromRank:  # queenside castle green
+                    pieceFromBB = 1 << self.square(toFile, toRank - 2)
+                    pieceFromBB_ = 1 << self.square(toFile, toRank - 3)
+                else:  # invalid move
+                    pieceFromBB = 0
+                    pieceFromBB_ = 0
+
+                pieceFromToBB = pieceFromBB ^ pieceToBB
+                pieceFromToBB_ = pieceFromBB_ ^ pieceToBB_
+                # Move king
+                self.pieceBB[color] ^= pieceFromToBB
+                self.pieceBB[piece] ^= pieceFromToBB
+                self.occupiedBB ^= pieceFromToBB
+                self.emptyBB ^= pieceFromToBB
+                # Move rook
+                self.pieceBB[color_] ^= pieceFromToBB_
+                self.pieceBB[piece_] ^= pieceFromToBB_
+                self.occupiedBB ^= pieceFromToBB_
+                self.emptyBB ^= pieceFromToBB_
                 # Undo restore captured piece (in advance)
                 self.pieceBB[color_] ^= fromBB
                 self.pieceBB[piece_] ^= fromBB
                 self.occupiedBB ^= fromBB
                 self.emptyBB ^= fromBB
+
+            elif piece_ == ROOK:
+                # if your rook was previously taken, restore castling on this side
+                if (toFile, toRank) == (10, 0):
+                    self.castlingState[RED][KINGSIDE] += 1
+                elif (toFile, toRank) == (3, 0):
+                    self.castlingState[RED][QUEENSIDE] += 1
+                elif (toFile, toRank) == (0, 10):
+                    self.castlingState[BLUE][KINGSIDE] += 1
+                elif (toFile, toRank) == (0, 3):
+                    self.castlingState[BLUE][QUEENSIDE] += 1
+                elif (toFile, toRank) == (3, 13):
+                    self.castlingState[YELLOW][KINGSIDE] += 1
+                elif (toFile, toRank) == (10, 13):
+                    self.castlingState[YELLOW][QUEENSIDE] += 1
+                elif (toFile, toRank) == (13, 3):
+                    self.castlingState[GREEN][KINGSIDE] += 1
+                elif (toFile, toRank) == (13, 10):
+                    self.castlingState[GREEN][QUEENSIDE] += 1
             # Restore captured piece
             self.pieceBB[color_] ^= fromBB
             self.pieceBB[piece_] ^= fromBB
@@ -1139,30 +1288,20 @@ class Board(QObject):
     def castlingAvailability(self):
         """Returns castling availability string."""
         castling = ''
+        color_name = {0: 'r', 1: 'b', 2: 'y', 3: 'g'}
         # "K" if kingside castling available, "Q" if queenside, "-" if no player can castle
-        if self.castlingSquares[RED][KINGSIDE]:
-            castling += 'rK'
-        if self.castlingSquares[RED][QUEENSIDE]:
-            castling += 'rQ'
-        if self.castlingSquares[BLUE][KINGSIDE]:
-            castling += 'bK'
-        if self.castlingSquares[BLUE][QUEENSIDE]:
-            castling += 'bQ'
-        if self.castlingSquares[YELLOW][KINGSIDE]:
-            castling += 'yK'
-        if self.castlingSquares[YELLOW][QUEENSIDE]:
-            castling += 'yQ'
-        if self.castlingSquares[GREEN][KINGSIDE]:
-            castling += 'gK'
-        if self.castlingSquares[GREEN][QUEENSIDE]:
-            castling += 'gQ'
+        for color in [RED, BLUE, YELLOW, GREEN]:
+            if self.castlingState[color][KINGSIDE] == 1:
+                castling += f'{color_name[color]}K'
+            if self.castlingState[color][QUEENSIDE] == 1:
+                castling += f'{color_name[color]}Q'
         if not castling:
             castling = '-'
         return castling
 
     def parseFen4(self, fen4):
         """Sets board position according to the FEN4 string fen4."""
-        if SETTINGS.value('chesscom'):
+        if SETTINGS.checkSetting('chesscom'):
             # Remove chess.com prefix and commas
             i = fen4.rfind('-')
             fen4 = fen4[i+1:]
