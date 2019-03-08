@@ -18,10 +18,18 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from PyQt5.QtWidgets import QWidget, QPushButton, QLineEdit
-from PyQt5.QtCore import Qt, QSize, QRect, QPoint, pyqtSignal, QEvent
-from PyQt5.QtGui import QPainter, QPalette, QColor
+from PyQt5.QtWidgets import QWidget, QPushButton, QLineEdit, QPlainTextEdit, QFrame
+from PyQt5.QtCore import Qt, QSize, QRect, QRectF, QPoint, pyqtSignal, QEvent, QByteArray, QDataStream, QIODevice, \
+    QMimeData, QLineF, QSettings
+from PyQt5.QtGui import QPainter, QPalette, QColor, QFont, QDrag, QIcon, QCursor, QPolygonF, QPainterPath, QPen, \
+    QBrush
+from collections import deque
 from gui.board import Board
+from gui.settings import Settings
+# Load settings
+# COM = '4pc'
+# APP = '4PlayerChess'
+SETTINGS = Settings()
 
 
 class View(QWidget):
@@ -30,33 +38,54 @@ class View(QWidget):
     clicked = pyqtSignal(QPoint)
     squareSizeChanged = pyqtSignal(QSize)
     playerNameEdited = pyqtSignal(str, str, str, str)
+    playerRatingEdited = pyqtSignal(str, str, str, str)
+    pieceMoved = pyqtSignal(QPoint, QPoint)
+    dragStarted = pyqtSignal(QPoint)
 
-    def __init__(self):
+    def __init__(self, *_):
         super().__init__()
-        self.setAcceptDrops(True)
         self.squareSize = QSize(50, 50)
         self.board = Board(14, 14)
         self.pieces = {}
-        # self.clickedPiece = None
-        # self.clickedPieceIcon = None
-        # self.mouseRect = None
         self.highlights = []
         self.playerHighlights = {'r': self.PlayerHighlight(12, 1, QColor('#bf3b43')),
                                  'b': self.PlayerHighlight(1, 1, QColor('#4185bf')),
                                  'y': self.PlayerHighlight(1, 12, QColor('#c09526')),
                                  'g': self.PlayerHighlight(12, 12, QColor('#4e9161'))}
+        # Player labels
         self.redName = None
         self.redNameEdit = None
+        self.redRating = '?'
         self.blueName = None
         self.blueNameEdit = None
+        self.blueRating = '?'
         self.yellowName = None
         self.yellowNameEdit = None
+        self.yellowRating = '?'
         self.greenName = None
         self.greenNameEdit = None
+        self.greenRating = '?'
         self.createPlayerLabels()
+        # Drag-drop
+        self.setAcceptDrops(True)
+        self.dragStart = None
+        self.clickedSquare = None
+        self.maskedSquare = None
+        self.mouseButton = None
+        self.currentPlayer = None
+        # Board orientation
+        self.orientation = deque(['r', 'b', 'y', 'g'])
+        # Arrows and square highlight
+        self.arrowStart = None
+        self.keyModifier = None
+        self.arrowColor = None
+        self.squareColor = None
+        # Coordinate help
+        self.coordinate = None
+        self.setMouseTracking(True)
 
     class SquareHighlight:
-        """A square highlight type."""
+        """A square highlight."""
         Type = 1
 
         def __init__(self, file, rank, color):
@@ -65,8 +94,48 @@ class View(QWidget):
             self.color = color
 
     class PlayerHighlight(SquareHighlight):
-        """A player highlight type. Same as square highlight, just renamed for convenience (unaltered subclass)."""
+        """A player highlight. Same as square highlight, just renamed for convenience (unaltered subclass)."""
         pass
+
+    class Arrow:
+        """An arrow highlight, to show possible moves on the board."""
+        Type = 2
+
+        def __init__(self, origin, target, color):
+            self.origin = origin
+            self.target = target
+            self.color = color
+
+    class LegalMoveIndicator:
+        """A legal move indicator."""
+        Type = 3
+
+        def __init__(self, square, capture=False):
+            self.square = square
+            self.capture = capture
+
+    def rotateBoard(self, rotation):
+        """Rotates board view (clockwise +, counterclockwise -)."""
+        self.orientation.rotate(rotation)
+        self.movePlayerLabels(self.orientation[0])
+        self.removeArrows()
+        self.update()
+
+    def autoRotate(self, rotation):
+        """Automatically rotates board after move is made or undone."""
+        if SETTINGS.checkSetting('autorotate'):
+            self.rotateBoard(rotation)
+
+    def setCurrentPlayer(self, player):
+        """Updates current player, if changed."""
+        if self.currentPlayer == player:
+            return
+        self.currentPlayer = player
+
+    def resetRotation(self, current_player='r'):
+        """Reset board rotation to default position"""
+        while self.orientation[0] != current_player:
+            self.rotateBoard(-1)
 
     def setBoard(self, board):
         """Updates board, if changed. Disconnects signals from old board and connects them to new board."""
@@ -83,6 +152,7 @@ class View(QWidget):
             board.dataChanged.connect(self.update)
             board.boardReset.connect(self.update)
             board.boardReset.connect(self.resetHighlights)
+            board.autoRotate.connect(self.autoRotate)
         self.updateGeometry()
 
     def setSquareSize(self, size):
@@ -95,40 +165,149 @@ class View(QWidget):
 
     def sizeHint(self):
         """Implements sizeHint() method. Computes and returns size based on size of board squares."""
-        return QSize(self.squareSize.width()*self.board.files, self.squareSize.height()*self.board.ranks)
+        return QSize(self.squareSize.width() * self.board.files, self.squareSize.height() * self.board.ranks)
 
-    def squareRect(self, file, rank):
+    def squareRect(self, file, rank, orientation=None):
         """Returns square of type QRect at position (file, rank)."""
         sqSize = self.squareSize
-        return QRect(QPoint(file*sqSize.width(), (self.board.ranks-(rank+1))*sqSize.height()), sqSize)
+        if orientation == 'b':
+            return QRect(QPoint((self.board.ranks - (rank + 1)) * sqSize.width(),
+                                (self.board.files - (file + 1)) * sqSize.height()), sqSize)
+        elif orientation == 'y':
+            return QRect(QPoint((self.board.files - (file + 1)) * sqSize.width(), rank * sqSize.height()), sqSize)
+        elif orientation == 'g':
+            return QRect(QPoint(rank * sqSize.width(), file * sqSize.height()), sqSize)
+        else:  # red by default
+            return QRect(QPoint(file * sqSize.width(), (self.board.ranks - (rank + 1)) * sqSize.height()), sqSize)
+
+    def squareCenter(self, square, orientation=None):
+        """Returns center of square as QPoint."""
+        sqSize = self.squareSize
+        file = square.x()
+        rank = square.y()
+        if orientation == 'b':
+            return QPoint((self.board.ranks - (rank + 1)) * sqSize.width() + sqSize.width() / 2,
+                          (self.board.files - (file + 1)) * sqSize.height() + sqSize.height() / 2)
+        elif orientation == 'y':
+            return QPoint((self.board.files - (file + 1)) * sqSize.width() + sqSize.width() / 2,
+                          rank * sqSize.height() + sqSize.height() / 2)
+        elif orientation == 'g':
+            return QPoint(rank * sqSize.width() + sqSize.width() / 2, file * sqSize.height() + sqSize.height() / 2)
+        else:  # red by default
+            return QPoint(file * sqSize.width() + sqSize.width() / 2,
+                          (self.board.ranks - (rank + 1)) * sqSize.height() + sqSize.height() / 2)
 
     def paintEvent(self, event):
         """Implements paintEvent() method. Draws squares and pieces on the board."""
         painter = QPainter()
         painter.begin(self)
-        # First draw squares, then highlights, then pieces
+        # Draw squares
         for rank in range(self.board.ranks):
             for file in range(self.board.files):
                 # Do not paint 3x3 sub-grids at the corners
                 if not ((file < 3 and rank < 3) or (file < 3 and rank > 10) or
                         (file > 10 and rank < 3) or (file > 10 and rank > 10)):
                     self.drawSquare(painter, file, rank)
-        self.drawHighlights(painter)
-        painter.fillRect(self.squareRect(12, 1), QColor('#40bf3b43'))
-        painter.fillRect(self.squareRect(1, 1), QColor('#404185bf'))
-        painter.fillRect(self.squareRect(1, 12), QColor('#40c09526'))
-        painter.fillRect(self.squareRect(12, 12), QColor('#404e9161'))
+        # Draw square highlights
+        self.drawSquareHighlights(painter)
+        painter.fillRect(self.squareRect(12, 1, self.orientation[0]), QColor('#40bf3b43'))
+        painter.fillRect(self.squareRect(1, 1, self.orientation[0]), QColor('#404185bf'))
+        painter.fillRect(self.squareRect(1, 12, self.orientation[0]), QColor('#40c09526'))
+        painter.fillRect(self.squareRect(12, 12, self.orientation[0]), QColor('#404e9161'))
+        # Show or hide player names
+        if SETTINGS.checkSetting('shownames'):
+            self.showNames()
+        else:
+            self.hideNames()
+        # Draw pieces
         for rank in range(self.board.ranks):
             for file in range(self.board.files):
-                self.drawPiece(painter, file, rank)
-        # if self.clickedPieceIcon and self.mouseRect:
-        #     self.clickedPieceIcon.paint(painter, self.mouseRect, Qt.AlignCenter)
+                if not self.maskedSquare == QPoint(file, rank):  # When dragging a piece, don't paint it
+                    self.drawPiece(painter, file, rank)
+        # Draw coordinates
+        if SETTINGS.checkSetting('showcoordinates'):
+            for y in range(14):
+                x = 0 if 2 < y < 11 else 3
+                square = self.squareRect(x, y)
+                square.moveTopLeft(QPoint(square.x() + 1, square.y() + 1))
+                square = QRectF(square)  # Only works with QRectF, so convert
+                if self.orientation[0] == 'b':
+                    file = self.board.files - (y + 1)
+                    rank = self.board.ranks - (x + 1)
+                elif self.orientation[0] == 'y':
+                    file = self.board.files - (x + 1)
+                    rank = y
+                elif self.orientation[0] == 'g':
+                    file = y
+                    rank = x
+                else:  # red by default
+                    file = x
+                    rank = self.board.ranks - (y + 1)
+                color = self.palette().color(QPalette.Light) if (file + rank) % 2 \
+                    else self.palette().color(QPalette.Dark)
+                font = QFont('Trebuchet MS', 10, QFont.Bold)
+                painter.setPen(color)
+                painter.setFont(font)
+                if self.orientation[0] in 'ry':
+                    painter.drawText(square, str(self.board.ranks - rank))
+                else:
+                    painter.drawText(square, chr(self.board.files - (file + 1) + 97))
+            for x in range(14):
+                y = 0 if 2 < x < 11 else 3
+                square = self.squareRect(x, y)
+                square.moveTopLeft(QPoint(square.x() - 1, square.y() - 1))
+                square = QRectF(square)  # Only works with QRectF, so convert
+                if self.orientation[0] == 'b':
+                    file = self.board.files - (y + 1)
+                    rank = self.board.ranks - (x + 1)
+                elif self.orientation[0] == 'y':
+                    file = self.board.files - (x + 1)
+                    rank = y
+                elif self.orientation[0] == 'g':
+                    file = y
+                    rank = x
+                else:  # red by default
+                    file = x
+                    rank = self.board.ranks - (y + 1)
+                color = self.palette().color(QPalette.Light) if (file + rank) % 2 \
+                    else self.palette().color(QPalette.Dark)
+                font = QFont('Trebuchet MS', 10, QFont.Bold)
+                painter.setPen(color)
+                painter.setFont(font)
+                if self.orientation[0] in 'ry':
+                    painter.drawText(square, Qt.AlignBottom | Qt.AlignRight, chr(file + 97))
+                else:
+                    painter.drawText(square, Qt.AlignBottom | Qt.AlignRight, str(rank + 1))
+        # Draw arrows
+        self.drawArrows(painter)
+        # Draw legal moves
+        if SETTINGS.checkSetting('showlegalmoves'):
+            self.drawLegalMoves(painter)
+        # Draw coordinate help
+        if SETTINGS.checkSetting('coordinatehelp'):
+            if self.coordinate:
+                file = ord(self.coordinate[1][0]) - 97
+                rank = int(self.coordinate[1][1:]) - 1
+                if not ((file < 3 and rank < 3) or (file < 3 and rank > 10) or
+                        (file > 10 and rank < 3) or (file > 10 and rank > 10)):
+                    square = self.coordinate[0]
+                    square = self.squareRect(square.x(), square.y())
+                    square.moveTopLeft(QPoint(square.x(), square.y()))
+                    square = QRectF(square)  # Only works with QRectF, so convert
+                    # Draw twice (grey and white with offset) to get shade effect for contrast
+                    painter.setPen(QColor('#80404040'))
+                    painter.setFont(QFont('Trebuchet MS', 20, QFont.Bold))
+                    painter.drawText(square, Qt.AlignCenter | Qt.AlignVCenter, self.coordinate[1])
+                    square.moveTopLeft(QPoint(square.x() - 1, square.y() - 1))
+                    painter.setPen(QColor('white'))
+                    painter.setFont(QFont('Trebuchet MS', 20, QFont.Bold))
+                    painter.drawText(square, Qt.AlignCenter | Qt.AlignVCenter, self.coordinate[1])
         painter.end()
 
     def drawSquare(self, painter, file, rank):
         """Draws dark or light square at position (file, rank) using painter."""
-        rect = self.squareRect(file, rank)
-        fillColor = self.palette().color(QPalette.Midlight) if (file+rank) % 2 else self.palette().color(QPalette.Mid)
+        rect = self.squareRect(file, rank, self.orientation[0])
+        fillColor = self.palette().color(QPalette.Midlight) if (file + rank) % 2 else self.palette().color(QPalette.Mid)
         painter.fillRect(rect, fillColor)
 
     def setPiece(self, char, icon):
@@ -142,52 +321,245 @@ class View(QWidget):
 
     def drawPiece(self, painter, file, rank):
         """Draws piece at square (file, rank) using painter."""
-        rect = self.squareRect(file, rank)
+        rect = self.squareRect(file, rank, self.orientation[0])
         char = self.board.getData(file, rank)
         if char != ' ':
             icon = self.piece(char)
-            # draggablePiece = QLabel(self)
-            # iconPixmap = icon.pixmap(QSize(50, 50))
-            # QCoreApplication.setAttribute(Qt.AA_UseHighDpiPixmaps)
-            # draggablePiece.setPixmap(iconPixmap)
-            # draggablePiece.move(rect.x(), rect.y())
-            # draggablePiece.show()
             if not icon.isNull():
                 icon.paint(painter, rect, Qt.AlignCenter)
 
-    def squareAt(self, point):
+    def squareAt(self, point, orientation=None):
         """Returns square (file, rank) of type QPoint that contains point."""
         sqSize = self.squareSize
-        file = point.x() / sqSize.width()
-        rank = point.y() / sqSize.height()
-        if (file < 0) or (file > self.board.files) or (rank < 0) or (rank > self.board.ranks):
+        x = point.x() // sqSize.width()
+        y = point.y() // sqSize.height()
+        if (x < 0) or (x > 13) or (y < 0) or (y > 13):
             return QPoint()
-        return QPoint(file, self.board.ranks - rank)
+        elif orientation == 'b':
+            return QPoint(self.board.files - (y + 1), self.board.ranks - (x + 1))
+        elif orientation == 'y':
+            return QPoint(self.board.files - (x + 1), y)
+        elif orientation == 'g':
+            return QPoint(y, x)
+        else:  # red by default
+            return QPoint(x, self.board.ranks - (y + 1))
 
     def mouseReleaseEvent(self, event):
-        """Implements mouseReleaseEvent() method. Emits signal with clicked square of type QPoint as value."""
-        point = self.squareAt(event.pos())
-        if point.isNull():
+        """Implements mouseReleaseEvent() method. Emits signal with clicked square (QPoint) in case of a left-click.
+        Adds arrows and square highlights in case of a right-click (drag)."""
+        point = self.squareAt(event.pos(), self.orientation[0])
+        arrowEnd = self.squareAt(event.pos())
+        if self.mouseButton == Qt.RightButton:
+            if self.keyModifier == Qt.Key_1:
+                self.arrowColor = QColor('#ab272f')
+                self.squareColor = QColor('#80ab272f')
+            elif self.keyModifier == Qt.Key_2:
+                self.arrowColor = QColor('#2d71ab')
+                self.squareColor = QColor('#802d71ab')
+            elif self.keyModifier == Qt.Key_3:
+                self.arrowColor = QColor('#ac8112')
+                self.squareColor = QColor('#80ac8112')
+            elif self.keyModifier == Qt.Key_4:
+                self.arrowColor = QColor('#3a7d4d')
+                self.squareColor = QColor('#803a7d4d')
+            elif self.keyModifier == Qt.Key_0:
+                self.arrowColor = QColor('#ff8c00')
+                self.squareColor = QColor('#80ff8c00')
+            else:
+                if SETTINGS.checkSetting('autocolor'):
+                    if self.orientation[0] == 'r':
+                        self.arrowColor = QColor('#ab272f')
+                        self.squareColor = QColor('#80ab272f')
+                    elif self.orientation[0] == 'b':
+                        self.arrowColor = QColor('#2d71ab')
+                        self.squareColor = QColor('#802d71ab')
+                    elif self.orientation[0] == 'y':
+                        self.arrowColor = QColor('#ac8112')
+                        self.squareColor = QColor('#80ac8112')
+                    elif self.orientation[0] == 'g':
+                        self.arrowColor = QColor('#3a7d4d')
+                        self.squareColor = QColor('#803a7d4d')
+                else:
+                    # self.arrowColor = QColor('#ff8c00')
+                    # self.squareColor = QColor('#80ff8c00')
+                    self.arrowColor = QColor('#000')
+                    self.squareColor = QColor('#666')
+            origin = self.squareCenter(self.arrowStart)
+            target = self.squareCenter(arrowEnd)
+            if origin == target:
+                sq = self.squareAt(origin)
+                file = sq.x()
+                rank = sq.y()
+                color = self.squareColor
+                square = self.SquareHighlight(file, rank, color)
+                # If already exists, remove existing
+                removed = 0
+                for highlight in reversed(self.highlights):
+                    if highlight.Type == self.SquareHighlight.Type and highlight.file == file and \
+                            highlight.rank == rank and highlight.color == color:
+                        self.removeHighlight(highlight)
+                        removed += 1
+                if not removed:
+                    # Do not allow drawing outside board
+                    if not ((file < 3 and rank < 3) or (file < 3 and rank > 10) or
+                            (file > 10 and rank < 3) or (file > 10 and rank > 10)):
+                        self.addHighlight(square)
+            else:
+                color = self.arrowColor
+                arrow = self.Arrow(origin, target, color)
+                # If already exists, remove existing
+                removed = 0
+                for highlight in reversed(self.highlights):
+                    if highlight.Type == self.Arrow.Type and highlight.origin == origin and \
+                            highlight.target == target and highlight.color == color:
+                        self.removeHighlight(highlight)
+                        removed += 1
+                if not removed:
+                    # Do not allow drawing outside board
+                    fromSquare = self.squareAt(origin)
+                    toSquare = self.squareAt(target)
+                    fromFile = fromSquare.x()
+                    fromRank = fromSquare.y()
+                    toFile = toSquare.x()
+                    toRank = toSquare.y()
+                    if not ((fromFile < 3 and fromRank < 3) or (fromFile < 3 and fromRank > 10) or
+                            (fromFile > 10 and fromRank < 3) or (fromFile > 10 and fromRank > 10)) and not \
+                            ((toFile < 3 and toRank < 3) or (toFile < 3 and toRank > 10) or
+                             (toFile > 10 and toRank < 3) or (toFile > 10 and toRank > 10)):
+                        self.addHighlight(arrow)
             return
-        self.clicked.emit(point)
-        # self.clickedPiece = None
-        # self.clickedPieceIcon = None
-        # self.mouseRect = None
+        elif self.mouseButton == Qt.LeftButton:
+            if point.isNull():
+                return
+            self.clicked.emit(point)
+        else:
+            return
 
-    # def mousePressEvent(self, event):
-    #     point = self.squareAt(event.pos())
-    #     if point.isNull():
-    #         return
-    #     self.clickedPiece = self.board.getData(point.x(), point.y())
-    #
-    # def mouseMoveEvent(self, event):
-    #     position = event.pos()
-    #     offset = QPoint(self.squareSize.width() / 2, self.squareSize.height() / 2)
-    #     self.mouseRect = QRect(position - offset, self.squareSize)
-    #     if self.clickedPiece and self.clickedPiece != ' ':
-    #         self.clickedPieceIcon = self.piece(self.clickedPiece)
-    #         if not self.clickedPieceIcon.isNull():
-    #             self.update()
+    def mousePressEvent(self, event):
+        """Implements mousePressEvent() method. Records drag start position, clicked square and mouse button. Also
+        records arrow start and removes arrows if left-click on empty square."""
+        self.dragStart = event.pos()
+        self.clickedSquare = self.squareAt(event.pos(), self.orientation[0])
+        self.mouseButton = event.buttons()
+        self.arrowStart = self.squareAt(event.pos())
+        # If empty square clicked with left mouse button, remove arrows
+        if event.buttons() == Qt.LeftButton and \
+                self.board.getData(self.clickedSquare.x(), self.clickedSquare.y()) == ' ':
+            if self.keyModifier == Qt.Key_1:
+                self.removeArrows([QColor('#80ab272f'), QColor('#ab272f')])
+            elif self.keyModifier == Qt.Key_2:
+                self.removeArrows([QColor('#802d71ab'), QColor('#2d71ab')])
+            elif self.keyModifier == Qt.Key_3:
+                self.removeArrows([QColor('#80ac8112'), QColor('#ac8112')])
+            elif self.keyModifier == Qt.Key_4:
+                self.removeArrows([QColor('#803a7d4d'), QColor('#3a7d4d')])
+            elif self.keyModifier == Qt.Key_0:
+                self.removeArrows([QColor('#80ff8c00'), QColor('#ff8c00')])
+            else:
+                self.removeArrows()
+
+    def mouseMoveEvent(self, event):
+        """Implements mouseMoveEvent() method. Executes drag action and gets coordinate of square under mouse."""
+        # Coordinate help
+        square = self.squareAt(event.pos(), self.orientation[0])
+        text = chr(square.x() + 97) + str(square.y() + 1)
+        square = self.squareAt(event.pos())
+        self.coordinate = (square, text)
+        self.update()
+        # Drag action
+        if not event.buttons() == Qt.LeftButton:
+            return
+        if not self.clickedSquare or not self.dragStart:
+            return
+        if (event.pos() - self.dragStart).manhattanLength() < 5:
+            return
+        char = self.board.getData(self.clickedSquare.x(), self.clickedSquare.y())
+        if char[0] != self.currentPlayer:
+            return
+        if char != ' ':
+            icon = self.piece(char)
+            if icon.isNull():
+                return
+            self.showLegalMoves()
+            iconPosition = self.squareRect(self.clickedSquare.x(), self.clickedSquare.y(),
+                                           self.orientation[0]).topLeft()
+            offset = QPoint(event.pos() - iconPosition)
+            # Pixmap shown under cursor while dragging
+            dpr = 2  # device pixel ratio
+            pixmap = icon.pixmap(QSize(self.squareSize.width() * dpr, self.squareSize.height() * dpr))
+            pixmap.setDevicePixelRatio(dpr)
+            # Serialize drag-drop data into QByteArray
+            data = QByteArray()
+            dataStream = QDataStream(data, QIODevice.WriteOnly)
+            dataStream << icon << offset
+            # Custom MIME data
+            mimeData = QMimeData()
+            mimeData.setData('dragdrop', data)
+            # Drag action
+            drag = QDrag(self)
+            drag.setMimeData(mimeData)
+            drag.setPixmap(pixmap)
+            drag.setHotSpot(QPoint(self.squareSize.width() / 2, self.squareSize.height() / 2))
+            self.maskedSquare = self.clickedSquare
+            self.dragStarted.emit(self.clickedSquare)
+            drag.exec_()
+            self.maskedSquare = None
+
+    def dragEnterEvent(self, event):
+        """Implements dragEnterEvent() method."""
+        if event.mimeData().hasFormat('dragdrop'):
+            if event.source() == self:
+                event.setDropAction(Qt.MoveAction)
+                event.accept()
+            else:
+                event.ignore()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        """Implements dragMoveEvent() method."""
+        if event.mimeData().hasFormat('dragdrop'):
+            if event.source() == self:
+                event.setDropAction(Qt.MoveAction)
+                event.accept()
+            else:
+                event.ignore()
+        else:
+            event.ignore()
+
+    def dragLeaveEvent(self, event):
+        """Implements dragLeaveEvent() method."""
+        # Keep cursor on the board while dragging
+        cursor = QCursor()
+        position = cursor.pos()
+        topLeft = self.mapToGlobal(self.geometry().topLeft()) - self.geometry().topLeft()
+        bottomRight = self.mapToGlobal(self.geometry().bottomRight()) - self.geometry().topLeft()
+        bound = lambda x, l, u: l if x < l else u if x > u else x
+        x = bound(position.x(), topLeft.x() + 1, bottomRight.x() - 1)
+        y = bound(position.y(), topLeft.y() + 1, bottomRight.y() - 1)
+        if x != position.x() or y != position.y():
+            cursor.setPos(x, y)
+
+    def dropEvent(self, event):
+        """Implements dropEvent() method. Handles drop action."""
+        self.removeLegalMoveIndicators()
+        if event.mimeData().hasFormat('dragdrop'):
+            # Read data serialized from the QByteArray
+            data = event.mimeData().data('dragdrop')
+            dataStream = QDataStream(data, QIODevice.ReadOnly)
+            icon = QIcon()
+            offset = QPoint()
+            dataStream >> icon >> offset
+            # Send signal to make the move
+            square = self.squareAt(event.pos(), self.orientation[0])
+            self.pieceMoved.emit(self.clickedSquare, square)
+            if event.source() == self:
+                event.setDropAction(Qt.MoveAction)
+                event.accept()
+            else:
+                event.ignore()
+        else:
+            event.ignore()
 
     def addHighlight(self, highlight):
         """Adds highlight to the list and redraws view."""
@@ -204,18 +576,157 @@ class View(QWidget):
 
     def removeHighlightsOfColor(self, color):
         """Removes all highlights of color."""
-        # NOTE: Need to loop through the reversed list, otherwise an element will be skipped if an element was removed
-        # in the previous iteration.
-        for highlight in reversed(self.highlights):
-            if highlight.color == color:
+        for highlight in reversed(self.highlights):  # reversed list, because modifying while looping
+            if not highlight.Type == self.LegalMoveIndicator.Type and highlight.color == color:
                 self.removeHighlight(highlight)
 
-    def drawHighlights(self, painter):
+    def removeArrows(self, colors=None):
+        """Removes all arrows and highlighted squares drawn on the board."""
+        if colors:
+            for color in colors:
+                self.removeHighlightsOfColor(color)
+        else:
+            colors = [QColor('#80ff8c00'), QColor('#80ab272f'), QColor('#802d71ab'), QColor('#80ac8112'),
+                      QColor('#803a7d4d')]
+            for highlight in reversed(self.highlights):  # reversed list, because modifying while looping
+                if highlight.Type == self.Arrow.Type:
+                    self.removeHighlight(highlight)
+                elif highlight.Type == self.SquareHighlight.Type and highlight.color in colors:
+                    self.removeHighlight(highlight)
+
+    def drawSquareHighlights(self, painter):
         """Draws all recognized highlights stored in the list."""
         for highlight in self.highlights:
             if highlight.Type == self.SquareHighlight.Type:
-                rect = self.squareRect(highlight.file, highlight.rank)
+                colors = [QColor('#80ff8c00'), QColor('#80ab272f'), QColor('#802d71ab'), QColor('#80ac8112'),
+                          QColor('#803a7d4d')]
+                if highlight.color in colors:
+                    rect = self.squareRect(highlight.file, highlight.rank)
+                else:
+                    rect = self.squareRect(highlight.file, highlight.rank, self.orientation[0])
                 painter.fillRect(rect, highlight.color)
+
+    def drawArrows(self, painter):
+        """Draws arrows on the board."""
+        for highlight in self.highlights:
+            if highlight.Type == self.Arrow.Type:
+                lineWidth = 10
+                sqSize = self.squareSize
+                painter.setPen(QPen(highlight.color, lineWidth, Qt.SolidLine, Qt.RoundCap))
+                origin = highlight.origin
+                target = highlight.target
+                dx = target.x() - origin.x()
+                dy = target.y() - origin.y()
+                # Knight jumps
+                if dx == sqSize.width() and dy == -2 * sqSize.height():
+                    corner = QPoint(origin.x(), origin.y() - 2 * sqSize.height())
+                    line = QLineF(origin, corner)
+                    painter.drawLine(line)
+                    origin = corner
+                elif dx == 2 * sqSize.width() and dy == -sqSize.height():
+                    corner = QPoint(origin.x() + 2 * sqSize.width(), origin.y())
+                    line = QLineF(origin, corner)
+                    painter.drawLine(line)
+                    origin = corner
+                elif dx == 2 * sqSize.width() and dy == sqSize.height():
+                    corner = QPoint(origin.x() + 2 * sqSize.width(), origin.y())
+                    line = QLineF(origin, corner)
+                    painter.drawLine(line)
+                    origin = corner
+                elif dx == sqSize.width() and dy == 2 * sqSize.height():
+                    corner = QPoint(origin.x(), origin.y() + 2 * sqSize.height())
+                    line = QLineF(origin, corner)
+                    painter.drawLine(line)
+                    origin = corner
+                elif dx == -sqSize.width() and dy == 2 * sqSize.height():
+                    corner = QPoint(origin.x(), origin.y() + 2 * sqSize.height())
+                    line = QLineF(origin, corner)
+                    painter.drawLine(line)
+                    origin = corner
+                elif dx == -2 * sqSize.width() and dy == sqSize.height():
+                    corner = QPoint(origin.x() - 2 * sqSize.width(), origin.y())
+                    line = QLineF(origin, corner)
+                    painter.drawLine(line)
+                    origin = corner
+                elif dx == -2 * sqSize.width() and dy == -sqSize.height():
+                    corner = QPoint(origin.x() - 2 * sqSize.width(), origin.y())
+                    line = QLineF(origin, corner)
+                    painter.drawLine(line)
+                    origin = corner
+                elif dx == -sqSize.width() and dy == -2 * sqSize.height():
+                    corner = QPoint(origin.x(), origin.y() - 2 * sqSize.height())
+                    line = QLineF(origin, corner)
+                    painter.drawLine(line)
+                    origin = corner
+                # Other moves (and second part of knight jump)
+                line = QLineF(origin, target)
+                angle = line.angle()
+                tip = line.p2()
+                line.setLength(line.length() - 2 * lineWidth)
+                painter.drawLine(line)
+                tipOffset = line.p2()
+                leftBase = QLineF()
+                leftBase.setP1(tipOffset)
+                leftBase.setLength(lineWidth)
+                leftBase.setAngle(angle - 90)
+                left = leftBase.p2()
+                rightBase = QLineF()
+                rightBase.setP1(tipOffset)
+                rightBase.setLength(lineWidth)
+                rightBase.setAngle(angle + 90)
+                right = rightBase.p2()
+                arrowHead = QPolygonF([left, right, tip])
+                path = QPainterPath()
+                path.addPolygon(arrowHead)
+                painter.fillPath(path, QBrush(highlight.color))
+
+    def showLegalMoves(self):
+        """Shows legal moves."""
+        if SETTINGS.checkSetting('showlegalmoves'):
+            fromFile = self.clickedSquare.x()
+            fromRank = self.clickedSquare.y()
+            identifier = self.board.getData(fromFile, fromRank)
+            if identifier != ' ' and identifier[0] == self.currentPlayer:
+                color = ['r', 'b', 'y', 'g'].index(identifier[0])
+                piece = ['P', 'N', 'B', 'R', 'Q', 'K'].index(identifier[1]) + 4
+                self.addLegalMoveIndicators(piece, fromFile, fromRank, color)
+
+    def addLegalMoveIndicators(self, piece, fromFile, fromRank, color):
+        """Adds legal move indicators."""
+        origin = self.board.square(fromFile, fromRank)
+        moves = self.board.getSquares(self.board.legalMoves(piece, origin, color) & self.board.emptyBB)
+        captures = self.board.getSquares(self.board.legalMoves(piece, origin, color) &
+                                         self.board.occupiedBB)
+        for move in moves:
+            legalMoveIndicator = self.LegalMoveIndicator(QPoint(move[0], move[1]))
+            self.addHighlight(legalMoveIndicator)
+        for capture in captures:
+            legalMoveIndicator = self.LegalMoveIndicator(QPoint(capture[0], capture[1]), True)
+            self.addHighlight(legalMoveIndicator)
+
+    def removeLegalMoveIndicators(self):
+        """Removes all legal move indicators."""
+        for highlight in reversed(self.highlights):
+            if highlight.Type == self.LegalMoveIndicator.Type:
+                self.removeHighlight(highlight)
+
+    def drawLegalMoves(self, painter):
+        """Draws legal move indicators."""
+        for highlight in reversed(self.highlights):
+            if highlight.Type == self.LegalMoveIndicator.Type:
+                center = self.squareCenter(highlight.square, self.orientation[0])
+                if highlight.capture:
+                    lineWidth = 4
+                    rx = self.squareSize.width() / 2 - lineWidth / 2
+                    ry = rx
+                    painter.setPen(QPen(QColor('#40000000'), lineWidth, Qt.SolidLine))
+                    painter.drawEllipse(center, rx, ry)
+                else:
+                    rx = self.squareSize.width() / 10
+                    ry = rx
+                    painter.setBrush(QColor('#40000000'))
+                    painter.setPen(Qt.NoPen)
+                    painter.drawEllipse(center, rx, ry)
 
     def highlightPlayer(self, player):
         """Adds highlight for player to indicate turn. Removes highlights for other players if they exist."""
@@ -226,6 +737,18 @@ class View(QWidget):
                     self.removeHighlight(self.playerHighlights[otherPlayer])
                 except ValueError:
                     pass
+
+    def highlightChecks(self):
+        """Adds red square highlight for kings in check."""
+        checkColor = QColor('#ccff0000')
+        for highlight in reversed(self.highlights):  # reversed list, because modifying while looping
+            if highlight.Type == self.SquareHighlight.Type and highlight.color == checkColor:
+                self.removeHighlight(highlight)
+        for color in range(4):
+            inCheck, (file, rank) = self.board.kingInCheck(color)
+            if inCheck:
+                highlight = self.SquareHighlight(file, rank, checkColor)
+                self.addHighlight(highlight)
 
     def resetHighlights(self):
         """Clears list of highlights and redraws view."""
@@ -239,12 +762,12 @@ class View(QWidget):
             self.setFixedSize(150, 50)
             self.setText('Player Name')
             self.setStyleSheet("""
-            QPushButton {border: none; font-weight: bold;}
-            QPushButton[player='red'] {color: #bf3b43;}
-            QPushButton[player='blue'] {color: #4185bf;}
-            QPushButton[player='yellow'] {color: #c09526;}
-            QPushButton[player='green'] {color: #4e9161;}
-            """)
+                QPushButton {border: none; font-weight: bold;}
+                QPushButton[player='red'] {color: #bf3b43;}
+                QPushButton[player='blue'] {color: #4185bf;}
+                QPushButton[player='yellow'] {color: #c09526;}
+                QPushButton[player='green'] {color: #4e9161;}
+                """)
 
     class PlayerNameEdit(QLineEdit):
         """Player name edit field."""
@@ -258,14 +781,14 @@ class View(QWidget):
             self.setAttribute(Qt.WA_MacShowFocusRect, 0)
             self.installEventFilter(self)
             self.setStyleSheet("""
-            QLineEdit {font-weight: bold;}
-            QLineEdit[player='red'] {color: #bf3b43;}
-            QLineEdit[player='blue'] {color: #4185bf;}
-            QLineEdit[player='yellow'] {color: #c09526;}
-            QLineEdit[player='green'] {color: #4e9161;}
-            """)
+                QLineEdit {font-weight: bold;}
+                QLineEdit[player='red'] {color: #bf3b43;}
+                QLineEdit[player='blue'] {color: #4185bf;}
+                QLineEdit[player='yellow'] {color: #c09526;}
+                QLineEdit[player='green'] {color: #4e9161;}
+                """)
 
-        def eventFilter(self, object, event):
+        def eventFilter(self, object_, event):
             """Handles focusOut event."""
             if event.type() == QEvent.FocusOut:
                 self.focusOut.emit()
@@ -334,21 +857,111 @@ class View(QWidget):
         self.greenNameEdit.returnPressed.connect(lambda: self.setPlayerName(self.greenName))
         self.greenNameEdit.focusOut.connect(lambda: self.setPlayerName(self.greenName))
 
+    def movePlayerLabels(self, orientation):
+        """Moves player labels when board orientation is changed."""
+        if orientation == 'b':
+            self.redName.move(550, 0)
+            self.redNameEdit.move(550, 0)
+            self.blueName.move(550, 650)
+            self.blueNameEdit.move(550, 650)
+            self.yellowName.move(0, 650)
+            self.yellowNameEdit.move(0, 650)
+            self.greenName.move(0, 0)
+            self.greenNameEdit.move(0, 0)
+        elif orientation == 'y':
+            self.redName.move(0, 0)
+            self.redNameEdit.move(0, 0)
+            self.blueName.move(550, 0)
+            self.blueNameEdit.move(550, 0)
+            self.yellowName.move(550, 650)
+            self.yellowNameEdit.move(550, 650)
+            self.greenName.move(0, 650)
+            self.greenNameEdit.move(0, 650)
+        elif orientation == 'g':
+            self.redName.move(0, 650)
+            self.redNameEdit.move(0, 650)
+            self.blueName.move(0, 0)
+            self.blueNameEdit.move(0, 0)
+            self.yellowName.move(550, 0)
+            self.yellowNameEdit.move(550, 0)
+            self.greenName.move(550, 650)
+            self.greenNameEdit.move(550, 650)
+        else:  # red by default
+            self.redName.move(550, 650)
+            self.redNameEdit.move(550, 650)
+            self.blueName.move(0, 650)
+            self.blueNameEdit.move(0, 650)
+            self.yellowName.move(0, 0)
+            self.yellowNameEdit.move(0, 0)
+            self.greenName.move(550, 0)
+            self.greenNameEdit.move(550, 0)
+
+    def hideNames(self):
+        """Hides player name labels."""
+        self.redName.setHidden(True)
+        self.blueName.setHidden(True)
+        self.yellowName.setHidden(True)
+        self.greenName.setHidden(True)
+
+    def showNames(self):
+        """Shows player name labels."""
+        self.redName.setHidden(False)
+        self.blueName.setHidden(False)
+        self.yellowName.setHidden(False)
+        self.greenName.setHidden(False)
+
     def editPlayerName(self, nameEdit):
         """Activates player name edit field."""
         name = self.sender()
         name.setHidden(True)
         nameEdit.setHidden(False)
         nameEdit.setFocus(True)
+        nameEdit.setText(name.text())
 
     def setPlayerName(self, name):
         """Updates player name label and deactivates player name edit field."""
         nameEdit = self.sender()
-        name.setText(nameEdit.text())
+        s = name.text().split('\n')
+        if len(s) == 2:
+            rating = s[-1]
+            n = nameEdit.text().split('\n')
+            if len(n) > 1:
+                e = n[-1].strip('()')
+                if e.isdigit():
+                    rating = '(' + e + ')'
+                    name.setText(' '.join(n[:-1]) + '\n' + rating)
+                else:
+                    name.setText(' '.join(n) + '\n' + rating)
+            else:
+                name.setText(' '.join(n) + '\n' + rating)
+        else:
+            rating = None
+            n = nameEdit.text().strip().split(' ')
+            if n[0] == "":
+                name.setHidden(False)
+                nameEdit.setHidden(True)
+                nameEdit.setFocus(False)
+                return
+            if len(n) > 1:
+                e = n[-1].strip('()')
+                if e.isdigit():
+                    rating = '(' + e + ')'
+            if rating:
+                name.setText(' '.join(n[:-1]) + '\n' + rating)
+            else:
+                name.setText(' '.join(n))
         nameEdit.setHidden(True)
         name.setHidden(False)
-        self.playerNameEdited.emit(self.redName.text(), self.blueName.text(), self.yellowName.text(),
-                                   self.greenName.text())
+        red = self.redName.text().split('\n')
+        blue = self.blueName.text().split('\n')
+        yellow = self.yellowName.text().split('\n')
+        green = self.greenName.text().split('\n')
+        self.playerNameEdited.emit(red[0], blue[0], yellow[0], green[0])
+        redRating = red[-1].strip('()') if len(red) > 1 else self.redRating
+        blueRating = blue[-1].strip('()') if len(blue) > 1 else self.blueRating
+        yellowRating = yellow[-1].strip('()') if len(yellow) > 1 else self.yellowRating
+        greenRating = green[-1].strip('()') if len(green) > 1 else self.greenRating
+        self.playerRatingEdited.emit(redRating, blueRating, yellowRating, greenRating)
 
     def setPlayerNames(self, red, blue, yellow, green):
         """Sets player names to names obtained from PGN4 file."""
@@ -364,3 +977,33 @@ class View(QWidget):
         self.blueName.setText(blue)
         self.yellowName.setText(yellow)
         self.greenName.setText(green)
+        self.setPlayerRating(self.redRating, self.blueRating, self.yellowRating, self.greenRating)
+
+    def setPlayerRating(self, redRating, blueRating, yellowRating, greenRating):
+        """Sets the player rating according to the PGN4 file."""
+        if redRating != '?':
+            self.redName.setText(self.redName.text() + '\n(' + redRating + ')')
+        if blueRating != '?':
+            self.blueName.setText(self.blueName.text() + '\n(' + blueRating + ')')
+        if yellowRating != '?':
+            self.yellowName.setText(self.yellowName.text() + '\n(' + yellowRating + ')')
+        if greenRating != '?':
+            self.greenName.setText(self.greenName.text() + '\n(' + greenRating + ')')
+
+
+class CommentEdit(QPlainTextEdit):
+    """Comment edit field."""
+    focusOut = pyqtSignal()
+
+    def __init__(self, *_):
+        super().__init__()
+        self.setFixedSize(300, 90)
+        self.setFrameShape(QFrame.NoFrame)
+        self.installEventFilter(self)
+        self.setFont(QFont('Trebuchet MS'))
+
+    def eventFilter(self, object_, event):
+        """Handles focusOut and returnPressed event."""
+        if event.type() == QEvent.FocusOut:
+            self.focusOut.emit()
+        return False

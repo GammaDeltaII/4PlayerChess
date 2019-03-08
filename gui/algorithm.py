@@ -18,11 +18,18 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from PyQt5.QtCore import QObject, pyqtSignal
+from PyQt5.QtCore import QObject, pyqtSignal, QSettings
 from PyQt5.QtGui import QColor
 from collections import deque
-from datetime import date
+from datetime import datetime
+from re import split
 from gui.board import Board
+from gui.settings import Settings
+
+# Load settings
+COM = '4pc'
+APP = '4PlayerChess'
+SETTINGS = Settings()
 
 
 class Algorithm(QObject):
@@ -30,6 +37,7 @@ class Algorithm(QObject):
     boardChanged = pyqtSignal(Board)
     gameOver = pyqtSignal(str)
     currentPlayerChanged = pyqtSignal(str)
+    newGameCreated = pyqtSignal()
     fen4Generated = pyqtSignal(str)
     pgn4Generated = pyqtSignal(str)
     moveTextChanged = pyqtSignal(str)
@@ -38,15 +46,21 @@ class Algorithm(QObject):
     removeHighlight = pyqtSignal(QColor)
     addHighlight = pyqtSignal(int, int, int, int, QColor)
     playerNamesChanged = pyqtSignal(str, str, str, str)
+    playerRatingChanged = pyqtSignal(str, str, str, str)
+    cannotReadPgn4 = pyqtSignal()
 
     NoResult, Team1Wins, Team2Wins, Draw = ['*', '1-0', '0-1', '1/2-1/2']  # Results
     NoPlayer, Red, Blue, Yellow, Green = ['?', 'r', 'b', 'y', 'g']  # Players
     playerQueue = deque([Red, Blue, Yellow, Green])
 
-    startPosition = '3yRyNyByKyQyByNyR3/3yPyPyPyPyPyPyPyP3/14/bRbP10gPgR/bNbP10gPgN/bBbP10gPgB/bKbP10gPgQ/' \
-                    'bQbP10gPgK/bBbP10gPgB/bNbP10gPgN/bRbP10gPgR/14/3rPrPrPrPrPrPrPrP3/3rRrNrBrQrKrBrNrR3 ' \
-                    'r - - 0 1'
-    # Castling rights: rKrQbKbQyKyQgKgQ (not implemented yet)
+    startFen4 = '3yRyNyByKyQyByNyR3/3yPyPyPyPyPyPyPyP3/14/bRbP10gPgR/bNbP10gPgN/bBbP10gPgB/bKbP10gPgQ/' \
+                'bQbP10gPgK/bBbP10gPgB/bNbP10gPgN/bRbP10gPgR/14/3rPrPrPrPrPrPrPrP3/3rRrNrBrQrKrBrNrR3 ' \
+                'r rKrQbKbQyKyQgKgQ - 0 1'
+
+    # chess.com: [player to move] - [dead 1/0] - [kingside castle 1/0] - [queenside castle 1/0] - [points] - [ply] -
+    chesscomStartFen4 = 'R-0,0,0,0-1,1,1,1-1,1,1,1-0,0,0,0-0-3,yR,yN,yB,yK,yQ,yB,yN,yR,3/3,yP,yP,yP,yP,yP,yP,yP,yP,3/' \
+                        '14/bR,bP,10,gP,gR/bN,bP,10,gP,gN/bB,bP,10,gP,gB/bK,bP,10,gP,gQ/bQ,bP,10,gP,gK/bB,bP,10,gP,gB/'\
+                        'bN,bP,10,gP,gN/bR,bP,10,gP,gR/14/3,rP,rP,rP,rP,rP,rP,rP,rP,3/3,rR,rN,rB,rQ,rK,rB,rN,rR,3'
 
     def __init__(self):
         super().__init__()
@@ -56,11 +70,16 @@ class Algorithm(QObject):
         self.currentPlayer = self.NoPlayer
         self.moveNumber = 0
         self.currentMove = self.Node('root', [], None)
-        self.currentMove.fen4 = self.startPosition
+        self.currentMove.fen4 = self.startFen4
         self.redName = self.NoPlayer
         self.blueName = self.NoPlayer
         self.yellowName = self.NoPlayer
         self.greenName = self.NoPlayer
+        self.redRating = '?'
+        self.blueRating = '?'
+        self.yellowRating = '?'
+        self.greenRating = '?'
+        self.chesscomMoveText = ''
         self.moveText = ''
         self.moveDict = dict()
         self.inverseMoveDict = dict()
@@ -74,6 +93,7 @@ class Algorithm(QObject):
             self.children = children
             self.parent = parent
             self.fen4 = None
+            self.comment = None
 
         def add(self, node):
             """Adds node to children."""
@@ -90,6 +110,7 @@ class Algorithm(QObject):
             return self.parent.getRoot()
 
         def pathFromRoot(self, actions=None):
+            """Returns a list of nextMove() actions to reach the current node from the root."""
             if not actions:
                 actions = []
             if self.parent is None:
@@ -99,6 +120,24 @@ class Algorithm(QObject):
                 actions.insert(0, 'nextMove(' + str(var) + ')')
             return self.parent.pathFromRoot(actions)
 
+        def getMoveNumber(self):
+            """Returns the move number in the format (ply, variation, move). NOTE: does NOT support subvariations."""
+            varNum = [int(a.strip('nextMove()')) for a in self.pathFromRoot()]
+            ply, var, move = (0, 0, 0)
+            plyCount = True
+            i = 0
+            while i < len(varNum):
+                if varNum[i] != 0:
+                    var = varNum[i]
+                    plyCount = False
+                else:
+                    if plyCount:
+                        ply += 1
+                    else:
+                        move += 1
+                i += 1
+            return str(ply + 1) + '-' + str(var) + '-' + str(move + 1) if var != 0 else str(ply)
+
     def updatePlayerNames(self, red, blue, yellow, green):
         """Sets player names to names entered in the player name labels."""
         self.redName = red if not (red == 'Player Name' or red == '') else '?'
@@ -106,6 +145,13 @@ class Algorithm(QObject):
         self.yellowName = yellow if not (yellow == 'Player Name' or yellow == '') else '?'
         self.greenName = green if not (green == 'Player Name' or green == '') else '?'
         self.getPgn4()  # Update PGN4
+
+    def updatePlayerRating(self, red, blue, yellow, green):
+        """Sets player rating to rating entered in the player name labels."""
+        self.redRating = red
+        self.blueRating = blue
+        self.yellowRating = yellow
+        self.greenRating = green
 
     def setResult(self, value):
         """Updates game result, if changed."""
@@ -144,42 +190,173 @@ class Algorithm(QObject):
 
     def newGame(self):
         """Initializes board and sets starting position."""
-        fen4 = self.startPosition
+        if SETTINGS.checkSetting('chesscom'):
+            fen4 = self.chesscomStartFen4
+        else:
+            fen4 = self.startFen4
         self.setBoardState(fen4)
         self.fen4Generated.emit(fen4)
-        self.currentPlayerChanged.emit(self.Red)
 
     def getFen4(self, emitSignal=True):
         """Gets FEN4 from current board state."""
-        fen4 = self.board.getFen4()
-        # Append character for current player
-        fen4 += self.currentPlayer + ' '
-        # TODO implement castling availability
-        fen4 += '- '  # "K" if kingside castling available, "Q" if queenside, "-" if no player can castle
-        fen4 += '- '  # En passant target square
-        fen4 += str(self.moveNumber) + ' '  # Number of quarter-moves
-        fen4 += str(self.moveNumber // 4 + 1)  # Number of full moves, starting from 1
+        if SETTINGS.checkSetting('chesscom'):
+            chesscomPrefix = self.currentPlayer.upper() + '-0,0,0,0' + \
+                             self.toChesscomCastling(self.board.castlingAvailability()) + '-0,0,0,0-' + \
+                             str(self.moveNumber) + '-'
+            fen4 = chesscomPrefix + self.board.getChesscomFen4()
+        else:
+            fen4 = self.board.getFen4()
+            # Append character for current player
+            fen4 += self.currentPlayer + ' '
+            fen4 += self.board.castlingAvailability() + ' '
+            fen4 += '- '  # En passant target square, n/a
+            fen4 += str(self.moveNumber) + ' '  # Number of quarter-moves
+            fen4 += str(self.moveNumber // 4 + 1)  # Number of full moves, starting from 1
         if emitSignal:
             self.fen4Generated.emit(fen4)
         return fen4
+
+    def toChesscomCastling(self, castling):
+        """Converts castling availability string to chess.com compatible format."""
+        s = '-'
+        s += '1,' if 'rK' in castling else '0,'
+        s += '1,' if 'bK' in castling else '0,'
+        s += '1,' if 'yK' in castling else '0,'
+        s += '1' if 'gK' in castling else '0'
+        s += '-'
+        s += '1,' if 'rQ' in castling else '0,'
+        s += '1,' if 'bQ' in castling else '0,'
+        s += '1,' if 'yQ' in castling else '0,'
+        s += '1' if 'gQ' in castling else '0'
+        return s
+
+    def setCastlingAvailability(self, fen4):
+        """Sets castling availability according to FEN4."""
+        castling = fen4.split(' ')[2]
+        RED, BLUE, YELLOW, GREEN = range(4)
+        QUEENSIDE, KINGSIDE = (0, 1)
+        self.board.castle[RED][KINGSIDE] = (1 << self.square(10, 0)) if 'rK' in castling else 0
+        self.board.castle[RED][QUEENSIDE] = (1 << self.square(3, 0)) if 'rQ' in castling else 0
+        self.board.castle[BLUE][KINGSIDE] = (1 << self.square(0, 10)) if 'bK' in castling else 0
+        self.board.castle[BLUE][QUEENSIDE] = (1 << self.square(0, 3)) if 'bQ' in castling else 0
+        self.board.castle[YELLOW][KINGSIDE] = (1 << self.square(3, 13)) if 'yK' in castling else 0
+        self.board.castle[YELLOW][QUEENSIDE] = (1 << self.square(10, 13)) if 'yQ' in castling else 0
+        self.board.castle[GREEN][KINGSIDE] = (1 << self.square(13, 3)) if 'gK' in castling else 0
+        self.board.castle[GREEN][QUEENSIDE] = (1 << self.square(13, 10)) if 'gQ' in castling else 0
 
     def setBoardState(self, fen4):
         """Sets board according to FEN4."""
         if not fen4:
             return
-        if self.getFen4(False) == fen4:  # Do not emit fen4Generated signal
-            return
+        # if self.getFen4(False) == fen4:  # Do not emit fen4Generated signal
+        #     return
+        self.newGameCreated.emit()
         self.setupBoard()
         self.board.parseFen4(fen4)
         self.setResult(self.NoResult)
-        self.setCurrentPlayer(fen4.split(' ')[1])
-        self.moveNumber = int(fen4.split(' ')[-2])
-        self.fenMoveNumber = int(fen4.split(' ')[-2]) + 1
+        if SETTINGS.checkSetting('chesscom'):
+            self.setCurrentPlayer(fen4[0].lower())
+            self.moveNumber = 0
+            self.fenMoveNumber = 1
+        else:
+            self.setCurrentPlayer(fen4.split(' ')[1])
+            self.moveNumber = int(fen4.split(' ')[-2])
+            self.fenMoveNumber = int(fen4.split(' ')[-2]) + 1
         self.currentMove = self.Node('root', [], None)
         self.currentMove.fen4 = fen4
+        self.chesscomMoveText = ''
         self.moveText = ''
         self.moveDict.clear()
         self.getPgn4()  # Update PGN4
+
+    def toChesscomMove(self, moveString):
+        """Converts move string to chess.com move notation."""
+        moveString = moveString.split()
+        if moveString[0][1] == 'P':
+            moveString.pop(0)
+            if len(moveString) == 3:
+                piece = moveString[1][1]
+                if piece != 'P':
+                    moveString[1] = 'x' + piece
+                else:
+                    moveString[1] = 'x'
+            else:
+                moveString.insert(1, '-')
+        elif len(moveString) == 4:
+            # Castling move
+            shortCastle = ['rK h1 rR k1', 'bK a8 bR a11', 'yK g14 yR d14', 'gK n7 gR n4']
+            longCastle = ['rK h1 rR d1', 'bK a8 bR a4', 'yK g14 yR k14', 'gK n7 gR n11']
+            if ' '.join(moveString) in shortCastle:
+                moveString = 'O-O'
+            elif ' '.join(moveString) in longCastle:
+                moveString = 'O-O-O'
+            else:
+                moveString[0] = moveString[0][1]
+                piece = moveString[2][1]
+                if piece != 'P':
+                    moveString[2] = 'x' + piece
+                else:
+                    moveString[2] = 'x'
+        else:
+            if moveString != 'O-O' and moveString != 'O-O-O':
+                # castling moves by castling square
+                shortCastle = ['rK h1 j1', 'bK a8 a10', 'yK g14 e14', 'gK n7 n5']
+                longCastle = ['rK h1 f1', 'bK a8 a6', 'yK g14 i14', 'gK n7 n9']
+                if ' '.join(moveString) in shortCastle:
+                    moveString = 'O-O'
+                elif ' '.join(moveString) in longCastle:
+                    moveString = 'O-O-O'
+                else:
+                    moveString[0] = moveString[0][1]
+                    moveString.insert(2, '-')
+        moveString = ''.join(moveString)
+        return moveString
+
+    def fromChesscomMove(self, move, player):
+        """Returns fromFile, fromRank, toFile, toRank from chess.com move."""
+        if move == 'O-O':
+            if player == self.Red:
+                fromFile, fromRank, toFile, toRank = (7, 0, 10, 0)
+            elif player == self.Blue:
+                fromFile, fromRank, toFile, toRank = (0, 7, 0, 10)
+            elif player == self.Yellow:
+                fromFile, fromRank, toFile, toRank = (6, 13, 3, 13)
+            elif player == self.Green:
+                fromFile, fromRank, toFile, toRank = (13, 6, 13, 3)
+            else:
+                fromFile, fromRank, toFile, toRank = [None] * 4
+        elif move == 'O-O-O':
+            if player == self.Red:
+                fromFile, fromRank, toFile, toRank = (7, 0, 3, 0)
+            elif player == self.Blue:
+                fromFile, fromRank, toFile, toRank = (0, 7, 0, 3)
+            elif player == self.Yellow:
+                fromFile, fromRank, toFile, toRank = (6, 13, 10, 13)
+            elif player == self.Green:
+                fromFile, fromRank, toFile, toRank = (13, 6, 13, 10)
+            else:
+                fromFile, fromRank, toFile, toRank = [None] * 4
+        else:
+            for c in reversed(move):
+                if c.isupper():
+                    move = move.replace(c, '')
+            move = move.replace('x', '')
+            move = move.replace('-', '')
+            move = move.replace('+', '')
+            move = move.replace('#', '')
+            prev = ''
+            i = 0
+            for char in move:
+                if (not char.isdigit()) and prev.isdigit():
+                    move = [move[:i], move[i:]]
+                    break
+                prev = char
+                i += 1
+            fromFile = ord(move[0][0]) - 97
+            fromRank = int(move[0][1:]) - 1
+            toFile = ord(move[1][0]) - 97
+            toRank = int(move[1][1:]) - 1
+        return fromFile, fromRank, toFile, toRank
 
     def toAlgebraic(self, moveString):
         """Converts move string to algebraic notation."""
@@ -201,7 +378,14 @@ class Algorithm(QObject):
                 moveString[2] = 'x'
         else:
             if moveString != 'O-O' and moveString != 'O-O-O':
-                moveString[0] = moveString[0][1]
+                shortCastle = ['rK h1 j1', 'bK a8 a10', 'yK g14 e14', 'gK n7 n5']
+                longCastle = ['rK h1 f1', 'bK a8 a6', 'yK g14 i14', 'gK n7 n9']
+                if ' '.join(moveString) in shortCastle:
+                    moveString = 'O-O'
+                elif ' '.join(moveString) in longCastle:
+                    moveString = 'O-O-O'
+                else:
+                    moveString[0] = moveString[0][1]
         moveString = ''.join(moveString)
         return moveString
 
@@ -250,8 +434,8 @@ class Algorithm(QObject):
     def strMove(self, fromFile, fromRank, toFile, toRank):
         """Returns move in string form, separated by spaces, i.e. '<piece> <from> <captured piece> <to>'."""
         piece: str = self.board.getData(fromFile, fromRank)
-        target: str = self.board.getData(toFile, toRank)
-        char = (piece + ' ' + chr(97 + fromFile) + str(fromRank + 1) + ' ' + target * (target != ' ') + ' ' +
+        captured: str = self.board.getData(toFile, toRank)
+        char = (piece + ' ' + chr(97 + fromFile) + str(fromRank + 1) + ' ' + captured * (captured != ' ') + ' ' +
                 chr(97 + toFile) + str(toRank + 1))  # chr(97) = 'a'
         return char
 
@@ -265,15 +449,14 @@ class Algorithm(QObject):
         fromFile = ord(moveString[1][0]) - 97  # chr(97) = 'a'
         fromRank = int(moveString[1][1:]) - 1
         if len(moveString) == 4:
-            target = moveString[2]
+            captured = moveString[2]
             toFile = ord(moveString[3][0]) - 97
             toRank = int(moveString[3][1:]) - 1
         else:
-            target = ' '
+            captured = ' '
             toFile = ord(moveString[2][0]) - 97
             toRank = int(moveString[2][1:]) - 1
-        self.board.setData(fromFile, fromRank, piece)
-        self.board.setData(toFile, toRank, target)
+        self.board.undoMove(fromFile, fromRank, toFile, toRank, piece, captured)
         self.currentMove = self.currentMove.parent
         self.moveNumber -= 1
         self.playerQueue.rotate(1)
@@ -304,7 +487,6 @@ class Algorithm(QObject):
             return
         moveString = self.currentMove.children[var].name
         moveString = moveString.split()
-        piece = moveString[0]
         fromFile = ord(moveString[1][0]) - 97  # chr(97) = 'a'
         fromRank = int(moveString[1][1:]) - 1
         if len(moveString) == 4:
@@ -313,8 +495,7 @@ class Algorithm(QObject):
         else:
             toFile = ord(moveString[2][0]) - 97
             toRank = int(moveString[2][1:]) - 1
-        self.board.setData(fromFile, fromRank, ' ')
-        self.board.setData(toFile, toRank, piece)
+        self.board.makeMove(fromFile, fromRank, toFile, toRank)
         self.currentMove = self.currentMove.children[var]
         self.moveNumber += 1
         # Signal View to add move highlight and remove highlights of next player
@@ -354,6 +535,7 @@ class Algorithm(QObject):
 
     def lastMove(self):
         """Sets board state to last move."""
+        self.firstMove()
         while self.currentMove.children:
             self.nextMove()
 
@@ -365,35 +547,60 @@ class Algorithm(QObject):
         """Generates PGN4 from current game."""
         pgn4 = ''
 
-        # Standard tags, ("?" if data unknown, "-" if not applicable)
-        pgn4 += '[Event "Four-Player Chess ' + self.variant + '"]\n'
-        pgn4 += '[Site "chess.com"]\n'
-        pgn4 += '[Date "' + date.today().strftime('%Y.%m.%d') + '"]\n'
+        # Tags: "?" if data unknown, "-" if not applicable
+        pgn4 += '[Variant "' + self.variant + '"]\n'
+        pgn4 += '[Site "www.chess.com/4-player-chess"]\n'
+        pgn4 += '[Date "' + datetime.utcnow().strftime('%a %b %d %Y %H:%M:%S (UTC)') + '"]\n'
+        # pgn4 += '[Event "-"]\n'
         # pgn4 += '[Round "-"]\n'
-        pgn4 += '[Red "' + self.redName + '"]\n'
-        pgn4 += '[Blue "' + self.blueName + '"]\n'
-        pgn4 += '[Yellow "' + self.yellowName + '"]\n'
-        pgn4 += '[Green "' + self.greenName + '"]\n'
-        pgn4 += '[Result "' + self.result + '"]\n'  # 1-0 (r & y win), 0-1 (b & g win), 1/2-1/2 (draw), * (no result)
-
-        # Supplemental tags
-        # pgn4 += '[RedElo "?"]\n'
-        # pgn4 += '[BlueElo "?"]\n'
-        # pgn4 += '[YellowElo "?"]\n'
-        # pgn4 += '[GreenElo "?"]\n'
+        pgn4 += '[Red "' + self.redName + '"]\n' if not self.redName == '?' else ''
+        pgn4 += '[RedElo "' + self.redRating + '"]\n' if not self.redRating == '?' else ''
+        pgn4 += '[Blue "' + self.blueName + '"]\n' if not self.blueName == '?' else ''
+        pgn4 += '[BlueElo "' + self.blueRating + '"]\n' if not self.blueRating == '?' else ''
+        pgn4 += '[Yellow "' + self.yellowName + '"]\n' if not self.yellowName == '?' else ''
+        pgn4 += '[YellowElo "' + self.yellowRating + '"]\n' if not self.yellowRating == '?' else ''
+        pgn4 += '[Green "' + self.greenName + '"]\n' if not self.greenName == '?' else ''
+        pgn4 += '[GreenElo "' + self.greenRating + '"]\n' if not self.greenRating == '?' else ''
+        # pgn4 += '[Result "' + self.result + '"]\n'  # 1-0 (r & y win), 0-1 (b & g win), 1/2-1/2 (draw), * (no result)
+        # pgn4 += '[Mode "ICS"]\n'  # ICS = Internet Chess Server, OTB = Over-The-Board
+        pgn4 += '[TimeControl "G/1 d15"]\n'  # 1-minute game with 15 seconds delay per move
         pgn4 += '[PlyCount "' + str(self.moveNumber) + '"]\n'  # Total number of quarter-moves
-        pgn4 += '[TimeControl "60 d15"]\n'  # 60 seconds sudden death with 15 seconds delay per move
-        pgn4 += '[Mode "ICS"]\n'  # ICS = Internet Chess Server, OTB = Over-The-Board
-        pgn4 += '[CurrentPosition "' + self.getFen4() + '"]\n'
-        pgn4 += '\n'
+        startFen4 = self.currentMove.getRoot().fen4
+        if SETTINGS.checkSetting('chesscom'):
+            if startFen4 != self.chesscomStartFen4:
+                pgn4 += '[SetUp "1"]\n'
+                pgn4 += '[StartFen4 "' + startFen4 + '"]\n'
+        else:
+            if startFen4 != self.startFen4:
+                pgn4 += '[SetUp "1"]\n'
+                pgn4 += '[StartFen4 "' + startFen4 + '"]\n'
+        pgn4 += '[CurrentMove "' + self.currentMove.getMoveNumber() + '"]\n'
+        pgn4 += '[CurrentPosition "' + self.getFen4() + '"]\n\n'
 
         # Movetext
-        pgn4 += self.moveText
+        if SETTINGS.checkSetting('chesscom'):
+            pgn4 = pgn4[:-1]  # remove newline
+            pgn4 += self.chesscomMoveText
+        else:
+            pgn4 += self.moveText
 
-        # Append result
-        pgn4 += self.result
+            # Append result
+            pgn4 += self.result
 
         self.pgn4Generated.emit(pgn4)
+
+    def updateMoveText(self):
+        """Updates movetext and dictionary."""
+        self.chesscomMoveText = ''
+        self.moveText = ''
+        self.moveDict.clear()
+        self.index = 0
+        self.getMoveText(self.currentMove.getRoot(), self.fenMoveNumber)
+        self.inverseMoveDict = {value: key for key, value in self.moveDict.items()}
+        self.moveTextChanged.emit(self.moveText)
+        if self.currentMove.name != 'root':
+            key = self.inverseMoveDict[self.currentMove]
+            self.selectMove.emit(key)
 
     def getMoveText(self, node, move=1, var=0):
         """Traverses move tree to generate movetext and updates move dictionary to keep track of the nodes associated
@@ -410,6 +617,7 @@ class Algorithm(QObject):
         # If different FEN4 starting position used, insert move number if needed
         if node.name == 'root' and move != 1 and (move - 1) % 4:
             token = str((move - 1) // 4 + 1) + '.'
+            self.chesscomMoveText += token
             self.moveText += token + ' '
             self.moveDict[(self.index, token)] = None
             self.index += 1
@@ -419,28 +627,39 @@ class Algorithm(QObject):
                 self.moveDict[(self.index, token)] = None
                 self.index += 1
             if (move - 1) % 4:
+                self.chesscomMoveText += ' '
                 self.moveText += ' '
         # Main move has variations
         if main and variations:
             if not (move - 1) % 4:
                 token = str(move // 4 + 1) + '.'
+                self.chesscomMoveText += '\n' + token + ' '
                 self.moveText += token + ' '
                 self.moveDict[(self.index, token)] = None
                 self.index += 1
+            else:
+                self.chesscomMoveText += '.. '
             # Add main move to movetext before expanding variations, but do not expand main move yet
+            chesscomToken = self.toChesscomMove(main.name)
+            self.chesscomMoveText += chesscomToken + ' '
             token = self.toAlgebraic(main.name)
             self.moveText += token + ' '
             self.moveDict[(self.index, token)] = main
             self.index += 1
+            if main.comment:
+                self.chesscomMoveText += '{ ' + main.comment + ' } '
+                self.moveText += '{ ' + main.comment + ' } '
             # Expand variations
             for variation in variations:
                 if self.moveText[-2] == ')':
                     self.index += 1
                 token = '('
+                self.chesscomMoveText += token + ' '
                 self.moveText += token + ' '
                 self.moveDict[(self.index, token)] = None
                 self.index += 1
-                token = str(move // 4 + 1) + '.'
+                token = str(move // 4 + 1)
+                self.chesscomMoveText += token
                 self.moveText += token + ' '
                 self.moveDict[(self.index, token)] = None
                 self.index += 1
@@ -450,11 +669,19 @@ class Algorithm(QObject):
                     self.moveDict[(self.index, token)] = None
                     self.index += 1
                 if (move - 1) % 4:
+                    self.chesscomMoveText += '.. '
                     self.moveText += ' '
+                else:
+                    self.chesscomMoveText += '. '
+                chesscomToken = self.toChesscomMove(variation.name)
+                self.chesscomMoveText += chesscomToken + ' '
                 token = self.toAlgebraic(variation.name)
                 self.moveText += token + ' '
                 self.moveDict[(self.index, token)] = variation
                 self.index += 1
+                if variation.comment:
+                    self.chesscomMoveText += '{ ' + variation.comment + ' } '
+                    self.moveText += '{ ' + variation.comment + ' } '
                 self.getMoveText(variation, move + 1, var + 1)
             # Expand main move
             self.index += 1
@@ -463,20 +690,147 @@ class Algorithm(QObject):
         elif main and not variations:
             if not (move - 1) % 4:
                 token = str(move // 4 + 1) + '.'
+                self.chesscomMoveText += '\n' + token + ' '
                 self.moveText += token + ' '
                 self.moveDict[(self.index, token)] = None
                 self.index += 1
+            else:
+                self.chesscomMoveText += '.. '
+            chesscomToken = self.toChesscomMove(main.name)
+            self.chesscomMoveText += chesscomToken + ' '
             token = self.toAlgebraic(main.name)
             self.moveText += token + ' '
             self.moveDict[(self.index, token)] = main
             self.index += 1
+            if main.comment:
+                self.chesscomMoveText += '{ ' + main.comment + ' } '
+                self.moveText += '{ ' + main.comment + ' } '
             self.getMoveText(main, move + 1, var)
         # Node is leaf node (i.e. end of variation or main line)
         else:
             if var != 0:
                 token = ')'
+                self.chesscomMoveText += token + ' '
                 self.moveText += token + ' '
                 self.moveDict[(self.index, token)] = None
+
+    def split_(self, movetext):
+        """Splits movetext into tokens."""
+        x = split('\s+(?={)|(?<=})\s+', movetext)  # regex: one or more spaces followed by { or preceded by }
+        movetext = []
+        for y in x:
+            if y:
+                if y[0] != '{':
+                    for z in y.split():
+                        movetext.append(z)
+                else:
+                    movetext.append(y)
+        return movetext
+
+    def parseChesscomPgn4(self, pgn4):
+        """Parses chess.com PGN4 and sets game state accordingly."""
+        startPosition = None
+        currentMove = None
+        lines = pgn4.split('\n')
+        movetext = ''
+        for line in lines:
+            if line == '':
+                continue
+            elif line[0] == '[' and line[-1] == ']':
+                tag = line.strip('[]').split('"')[:-1]
+                tag[0] = tag[0].strip()
+                if tag[0] == 'Variant' and tag[1] == 'FFA':
+                    self.cannotReadPgn4.emit()
+                    return False
+                elif tag[0] == 'Red':
+                    self.redName = tag[1]
+                elif tag[0] == 'RedElo':
+                    self.redRating = tag[1]
+                elif tag[0] == 'Blue':
+                    self.blueName = tag[1]
+                elif tag[0] == 'BlueElo':
+                    self.blueRating = tag[1]
+                elif tag[0] == 'Yellow':
+                    self.yellowName = tag[1]
+                elif tag[0] == 'YellowElo':
+                    self.yellowRating = tag[1]
+                elif tag[0] == 'Green':
+                    self.greenName = tag[1]
+                elif tag[0] == 'GreenElo':
+                    self.greenRating = tag[1]
+                elif tag[0] == 'Result':
+                    self.result = tag[1]
+                elif tag[0] == 'StartFen4':
+                    startPosition = tag[1]
+                elif tag[0] == 'CurrentMove':
+                    currentMove = tag[1]
+                else:
+                    # Irrelevant tags
+                    pass
+            else:
+                if not currentMove:
+                    self.cannotReadPgn4.emit()
+                    return False
+                movetext += line + ' '
+        # Generate game from movetext
+        self.newGame()
+        tokens = self.split_(movetext)
+        for token in tokens:
+            if token[0] == '(' and len(token) > 1:
+                index = tokens.index(token)
+                tokens.insert(index + 1, token[1:])
+                tokens[index] = token[0]
+        roots = []
+        prev = None
+        i = 0
+        for token in tokens:
+            try:
+                next_ = tokens[i + 1]
+            except IndexError:
+                next_ = None
+            if (token[0].isdigit() and token[-1] == '.') or token in '..RT#':
+                pass
+            elif token[0] == '{':
+                # Comment
+                self.currentMove.comment = token[1:-1].strip()
+            elif token == '(':
+                # Next move is variation
+                if not prev == ')':
+                    self.prevMove()
+                    roots.append(self.currentMove)
+                else:
+                    roots.append(self.currentMove)
+            elif token == ')':
+                # End of variation
+                root = roots.pop()
+                while self.currentMove.name != root.name:
+                    self.prevMove()
+                if next_ != '(':
+                    # Continue with previous line
+                    self.nextMove()
+            else:
+                fromFile, fromRank, toFile, toRank = self.fromChesscomMove(token, self.currentPlayer)
+                self.makeMove(fromFile, fromRank, toFile, toRank)
+            prev = token
+            i += 1
+        # Set game position to CurrentMove ("ply-variation-move")
+        self.firstMove()
+        currentMove = [int(c) for c in currentMove.split('-')]
+        if len(currentMove) == 1:
+            ply = currentMove[0]
+            for _ in range(ply):
+                self.nextMove()
+        else:
+            ply, variation, move = currentMove
+            for _ in range(ply - 1):
+                self.nextMove()
+            self.nextMove(variation)
+            for _ in range(move - 1):
+                self.nextMove()
+        # Emit signal to update player names and rating
+        self.playerNamesChanged.emit(self.redName, self.blueName, self.yellowName, self.greenName)
+        self.playerRatingChanged.emit(self.redRating, self.blueRating, self.yellowRating, self.greenRating)
+        return True
 
     def parsePgn4(self, pgn4):
         """Parses PGN4 and sets game state accordingly."""
@@ -488,7 +842,10 @@ class Algorithm(QObject):
             elif line[0] == '[' and line[-1] == ']':
                 tag = line.strip('[]').split('"')[:-1]
                 tag[0] = tag[0].strip()
-                if tag[0] == 'Red':
+                if tag[0] == 'Variant' and tag[1] == 'FFA':
+                    self.cannotReadPgn4.emit()
+                    return False
+                elif tag[0] == 'Red':
                     self.redName = tag[1]
                 elif tag[0] == 'Blue':
                     self.blueName = tag[1]
@@ -504,6 +861,9 @@ class Algorithm(QObject):
                     # Irrelevant tags
                     pass
             else:
+                if not currentPosition:
+                    self.cannotReadPgn4.emit()
+                    return False
                 # Generate game from movetext
                 self.newGame()
                 line = line.replace(' *', '')
@@ -514,7 +874,7 @@ class Algorithm(QObject):
                     # No movetext to process
                     break
                 roots = []
-                tokens = line.split()
+                tokens = self.split_(line)
                 prev = None
                 i = 0
                 for token in tokens:
@@ -524,6 +884,9 @@ class Algorithm(QObject):
                         next_ = None
                     if token[0].isdigit() or token[0] == '.':
                         pass
+                    elif token[0] == '{':
+                        # Comment
+                        self.currentMove.comment = token[1:-1].strip()
                     elif token == '(':
                         # Next move is variation
                         if not prev == ')':
@@ -556,6 +919,7 @@ class Algorithm(QObject):
                 exec('self.' + action)
         # Emit signal to update player names
         self.playerNamesChanged.emit(self.redName, self.blueName, self.yellowName, self.greenName)
+        return True
 
     def traverse(self, tree, children):
         """Traverses nodes of tree in breadth-first order."""
@@ -590,31 +954,13 @@ class Teams(Algorithm):
         if self.currentPlayer == self.Green and fromData[0] != 'g':
             return False
 
-        # Check if move is within board
-        if toFile < 0 or toFile > (self.board.files - 1):
-            return False
-        if toRank < 0 or toRank > (self.board.ranks - 1):
-            return False
-        if ((toFile < 3 and toRank < 3) or (toFile < 3 and toRank > 10) or
-                (toFile > 10 and toRank < 3) or (toFile > 10 and toRank > 10)):
-            return False
+        color = ['r', 'b', 'y', 'g'].index(fromData[0])
+        piece = ['P', 'N', 'B', 'R', 'Q', 'K'].index(fromData[1]) + 4
+        origin = self.board.square(fromFile, fromRank)
+        target = self.board.square(toFile, toRank)
 
-        # Check if target square is not occupied by friendly piece. (Castling move excluded.)
-        toData = self.board.getData(toFile, toRank)
-        if self.currentPlayer == self.Red and (toData[0] == 'r' or toData[0] == 'y'):
-            if not (fromData == 'rK' and toData == 'rR'):
-                return False
-        if self.currentPlayer == self.Blue and (toData[0] == 'b' or toData[0] == 'g'):
-            if not (fromData == 'bK' and toData == 'bR'):
-                return False
-        if self.currentPlayer == self.Yellow and (toData[0] == 'y' or toData[0] == 'r'):
-            if not (fromData == 'yK' and toData == 'yR'):
-                return False
-        if self.currentPlayer == self.Green and (toData[0] == 'g' or toData[0] == 'b'):
-            if not (fromData == 'gK' and toData == 'gR'):
-                return False
-
-        # TODO check if move is legal
+        if not (1 << target) & self.board.legalMoves(piece, origin, color):
+            return False
 
         # Check if move already exists
         moveString = self.strMove(fromFile, fromRank, toFile, toRank)
@@ -623,52 +969,17 @@ class Teams(Algorithm):
             move = self.Node(moveString, [], self.currentMove)
             self.currentMove.add(move)
             self.currentMove = move
-
-            # Update movetext and move dictionary
-            self.moveText = ''
-            self.moveDict.clear()
-            self.index = 0
-            self.getMoveText(self.currentMove.getRoot(), self.fenMoveNumber)
-            self.inverseMoveDict = {value: key for key, value in self.moveDict.items()}
-            key = self.inverseMoveDict[self.currentMove]
-            self.moveTextChanged.emit(self.moveText)
-            self.selectMove.emit(key)
+            # Update movetext and move dictionary and select current move in move list
+            self.updateMoveText()
         else:
             # Move already exists. Update current move, but do not change the move tree
             for child in self.currentMove.children:
                 if child.name == moveString:
                     self.currentMove = child
+                    self.updateMoveText()  # Make current move selected in move list
 
         # Make the move
-        if fromData[1] == 'K' and toData != ' ':
-            if toData[1] == 'R' and fromData[0] == toData[0]:
-                # Castling move
-                if fromRank == toRank:
-                    if abs(toFile - fromFile) == 3:  # Kingside
-                        kingFile = toFile - 1 if toFile > fromFile else toFile + 1
-                        rookFile = fromFile + 1 if toFile > fromFile else fromFile - 1
-                        self.board.movePiece(fromFile, fromRank, kingFile, toRank)
-                        self.board.movePiece(toFile, fromRank, rookFile, toRank)
-                    elif abs(toFile - fromFile) == 4:  # Queenside
-                        kingFile = toFile + 2 if toFile < fromFile else toFile - 2
-                        rookFile = fromFile - 1 if toFile < fromFile else fromFile + 1
-                        self.board.movePiece(fromFile, fromRank, kingFile, toRank)
-                        self.board.movePiece(toFile, fromRank, rookFile, toRank)
-                elif fromFile == toFile:
-                    if abs(toRank - fromRank) == 3:  # Kingside
-                        kingRank = toRank - 1 if toRank > fromRank else toRank + 1
-                        rookRank = fromRank + 1 if toRank > fromRank else fromRank - 1
-                        self.board.movePiece(fromFile, fromRank, toFile, kingRank)
-                        self.board.movePiece(fromFile, toRank, toFile, rookRank)
-                    elif abs(toRank - fromRank) == 4:  # Queenside
-                        kingRank = toRank + 2 if toRank < fromRank else toRank - 2
-                        rookRank = fromRank - 1 if toRank < fromRank else fromRank + 1
-                        self.board.movePiece(fromFile, fromRank, toFile, kingRank)
-                        self.board.movePiece(fromFile, toRank, toFile, rookRank)
-            else:
-                self.board.movePiece(fromFile, fromRank, toFile, toRank)
-        else:
-            self.board.movePiece(fromFile, fromRank, toFile, toRank)
+        self.board.makeMove(fromFile, fromRank, toFile, toRank)
 
         # Increment move number
         self.moveNumber += 1
@@ -683,6 +994,15 @@ class Teams(Algorithm):
 
         # Store FEN4 in current node
         self.currentMove.fen4 = fen4
+
+        #################
+        # TODO grayout player that got checkmated
+        self.board.canPreventCheckmate = [False]*4
+        for color in range(4):
+            if self.board.kingInCheckmate(color, self.currentPlayer):
+                color_name = ['red', 'blue', 'yellow', 'green']
+                print(f'{color_name[color]} lost!')
+        #################
 
         return True
 

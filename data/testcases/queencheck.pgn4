@@ -1,0 +1,11 @@
+[Variant "Teams"]
+[Site "www.chess.com/4-player-chess"]
+[Date "Sat Feb 23 2019 15:39:48 (UTC)"]
+[TimeControl "G/1 d15"]
+[PlyCount "12"]
+[CurrentMove "12"]
+[CurrentPosition "R-0,0,0,0-1,1,1,1-1,1,1,1-0,0,0,0-12-3,yR,yN,yB,yK,yQ,yB,yN,yR,3/6,yP,yP,yP,yP,yP,3/14/bR,bP,1,yP,yP,yP,6,gP,gR/bN,bP,10,gP,gN/bB,bP,10,gP,gB/bK,bP,10,gP,1/bQ,bP,8,gP,2,gK/bB,bP,10,gP,gB/bN,bP,9,gQ,gP,gN/bR,7,rP,rP,2,gP,gR/14/3,rP,1,bP,rP,rP,2,rP,3/3,rR,rN,rB,rQ,rK,rB,rN,rR,3"]
+
+1. i2-i4 .. b4-d4 .. d13-d11 .. m7-k7 
+2. e2-e3 .. d4xe3 .. e13-e11 .. Qn8-l6 
+3. j2-j4 .. e3xf2 .. f13-f11 .. Ql6-l5 

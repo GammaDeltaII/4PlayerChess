@@ -1,0 +1,38 @@
+[GameNr "981650"]
+[Variant "Teams"]
+[Result "0-1"]
+[Termination "Red resigned. 1-0"]
+[Red "PedroHenrique_Milano"]
+[RedElo "1200"]
+[Blue "superatos"]
+[BlueElo "1610"]
+[Yellow "SweetANGELmira"]
+[YellowElo "1200"]
+[Green "ElPolloLocoMan"]
+[GreenElo "1225"]
+[TimeControl "1+15D"]
+[Site "www.chess.com/4-player-chess"]
+[Date "Mon Feb 25 2019 14:48:25 GMT+0000 (UTC)"]
+[CurrentMove "81"]
+
+1. h2-h3 .. b7-c7 .. h13-h12 .. m8-k8
+2. Qg1-k5 .. Na5-b7 .. i13-i12 .. m4-k4
+3. d2-d4 .. b6-c6 .. g13-g11 .. Qn8-m8
+4. Bi1-h2 .. Na10-c9 .. d13-d11 .. Rn4-l4
+5. Qk5-g9 .. Nb7-d8 .. Bi14xBa6 .. Rl4-l9
+6. Qg9-g4 .. Qa7xBa6 .. Qh14-h13 .. Nn5-l6
+7. Bh2xNl6 .. Qa6xQh13+ .. Nj14xQh13 .. Rl9xBl6
+8. Qg4xk4 .. Nc9-d7 .. Nh13-j12 .. Rl6-l4
+9. Qk4-k5 .. Nd7-f6 .. Nj12-i10 .. Qm8-l8
+10. Qk5-f5 .. Nf6-e4 .. Ni10-j8 .. Ql8xf2
+11. Qf5xQf2 .. Ne4xQf2+ .. Rd14-d12 .. Rl4-f4
+12. Kh1-g1 .. Nf2xRd1 .. Rd12-f12 .. Rf4xRf12
+13. e2-e4 .. b10-c10 .. Ne14xRf12 .. m5-k5
+14. Nj1-h2 .. Ba9-c11 .. d11-d10 .. Bn9-m8
+15. Rk1-j1 .. Bc11xd10 .. Nf12-g10 .. m7-k7
+16. Bf1-e2 .. Nd1-e3 .. Nj8-i6 .. Bn6-l8
+17. Ne1-f3 .. Bd10-i5 .. Ni6xk5 .. Nn10-l11
+18. j2-j4 .. Bi5-g3 .. Nk5-i4 .. O-O-O
+19. Nh2-g4 .. Bg3-f4 .. Ni4-k5 .. Rn8-n5
+20. Kg1-h1 .. Ne3xNg4 .. Ng10-i9 .. Bm8xh3
+21. R
