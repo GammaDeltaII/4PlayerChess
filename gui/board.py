@@ -339,11 +339,11 @@ class Board(QObject):
             pinMask = self.kingRay(origin, color)
         else:
             pinMask = -1
-        if (1 << origin) & self.absolutePinsTeammate(color):
-            pinMaskTeammate = self.kingRayTeammate(origin, color)
-        else:
-            pinMaskTeammate = -1
-        pinMask &= pinMaskTeammate
+        # if (1 << origin) & self.absolutePinsTeammate(color):
+        #     pinMaskTeammate = self.kingRayTeammate(origin, color)
+        # else:
+        #     pinMaskTeammate = -1
+        # pinMask &= pinMaskTeammate
         if piece == PAWN:
             legal_moves = self.pawnMoves(origin, color) & ~friendly & pinMask
         elif piece == KNIGHT:
@@ -438,155 +438,155 @@ class Board(QObject):
                 second_option = legal_moves & all_possible_moves
                 return first_option | second_option
 
-        teammate_color = color + 2
-        if teammate_color >= 4:
-            teammate_color -= 4
-        # check if you can prevent teammate from getting checkmated
-        if self.canPreventCheckmate[teammate_color]:
-            if color in [RED, YELLOW]:
-                opp = [GREEN, BLUE]
-            elif color in [GREEN, BLUE]:
-                opp = [RED, YELLOW]
-            else:
-                return
-
-            operations = {0: self.shiftSW,
-                          1: self.shiftS,
-                          2: self.shiftSE,
-                          3: self.shiftW,
-                          4: self.shiftE,
-                          5: self.shiftNW,
-                          6: self.shiftN,
-                          7: self.shiftNE}
-            origin = self.pieceSet(teammate_color, KING)
-            all_possible_moves = 0
-            for i in range(8):
-                new_position = operations[i](origin)
-                if boardMask & new_position == 0:
-                    continue
-                new_position_square = self.bitScanForward(new_position)
-                # check if that position is empty
-                if self.emptyBB & new_position != 0:
-                    # get all pieces, that attack this square
-                    attackers = self.attackers(new_position_square, opp[0]) | self.attackers(new_position_square,
-                                                                                             opp[1])
-                    attackers_position = self.getSquares(attackers)
-                    # if more than 2 attackers, you can't block it
-                    if len(attackers_position) >= 2:
-                        continue
-                    # check if you can block
-                    attacker_square = self.square(attackers_position[0][0], attackers_position[0][1])
-                    ray = self.rayBetween(new_position_square, attacker_square)
-                    if_can_block = legal_moves & ray
-                    if if_can_block != 0:
-                        all_possible_moves |= if_can_block
-
-            king_square = self.bitScanForward(origin)
-            position_of_attacking_pieces = self.attackers(king_square, opp[0]) | self.attackers(king_square, opp[1])
-
-            first_option = legal_moves & position_of_attacking_pieces
-
-            attacking_pieces = self.getSquares(position_of_attacking_pieces)
-
-            all_possible_moves2 = 0
-            for off_piece in attacking_pieces:
-                piece_square = self.square(off_piece[0], off_piece[1])
-                ray = self.rayBetween(king_square, piece_square)
-                if all_possible_moves2 == 0:
-                    all_possible_moves2 = ray
-                else:
-                    all_possible_moves2 &= ray
-
-            second_option = legal_moves & all_possible_moves2
-            return first_option | second_option | all_possible_moves
+        # teammate_color = color + 2
+        # if teammate_color >= 4:
+        #     teammate_color -= 4
+        # # check if you can prevent teammate from getting checkmated
+        # if self.canPreventCheckmate[teammate_color]:
+        #     if color in [RED, YELLOW]:
+        #         opp = [GREEN, BLUE]
+        #     elif color in [GREEN, BLUE]:
+        #         opp = [RED, YELLOW]
+        #     else:
+        #         return
+        #
+        #     operations = {0: self.shiftSW,
+        #                   1: self.shiftS,
+        #                   2: self.shiftSE,
+        #                   3: self.shiftW,
+        #                   4: self.shiftE,
+        #                   5: self.shiftNW,
+        #                   6: self.shiftN,
+        #                   7: self.shiftNE}
+        #     origin = self.pieceSet(teammate_color, KING)
+        #     all_possible_moves = 0
+        #     for i in range(8):
+        #         new_position = operations[i](origin)
+        #         if boardMask & new_position == 0:
+        #             continue
+        #         new_position_square = self.bitScanForward(new_position)
+        #         # check if that position is empty
+        #         if self.emptyBB & new_position != 0:
+        #             # get all pieces, that attack this square
+        #             attackers = self.attackers(new_position_square, opp[0]) | self.attackers(new_position_square,
+        #                                                                                      opp[1])
+        #             attackers_position = self.getSquares(attackers)
+        #             # if more than 2 attackers, you can't block it
+        #             if len(attackers_position) >= 2:
+        #                 continue
+        #             # check if you can block
+        #             attacker_square = self.square(attackers_position[0][0], attackers_position[0][1])
+        #             ray = self.rayBetween(new_position_square, attacker_square)
+        #             if_can_block = legal_moves & ray
+        #             if if_can_block != 0:
+        #                 all_possible_moves |= if_can_block
+        #
+        #     king_square = self.bitScanForward(origin)
+        #     position_of_attacking_pieces = self.attackers(king_square, opp[0]) | self.attackers(king_square, opp[1])
+        #
+        #     first_option = legal_moves & position_of_attacking_pieces
+        #
+        #     attacking_pieces = self.getSquares(position_of_attacking_pieces)
+        #
+        #     all_possible_moves2 = 0
+        #     for off_piece in attacking_pieces:
+        #         piece_square = self.square(off_piece[0], off_piece[1])
+        #         ray = self.rayBetween(king_square, piece_square)
+        #         if all_possible_moves2 == 0:
+        #             all_possible_moves2 = ray
+        #         else:
+        #             all_possible_moves2 &= ray
+        #
+        #     second_option = legal_moves & all_possible_moves2
+        #     return first_option | second_option | all_possible_moves
 
         return legal_moves
 
-    def checkIfTeammateCanPreventCheckmate(self, color):
-        """Check if teammate of team color can prevent checkmate"""
-        # get color of your teammate
-        teammate_color = color + 2
-        if teammate_color >= 4:
-            teammate_color -= 4
-
-        if teammate_color in [RED, YELLOW]:
-            opp = [GREEN, BLUE]
-        elif teammate_color in [GREEN, BLUE]:
-            opp = [RED, YELLOW]
-        else:
-            return
-        # get position of king
-        king_file, king_rank = self.getSquares(self.pieceSet(color, KING))[0]
-        king_square = self.square(king_file, king_rank)
-
-        # get bitmap of pieces attacking the king
-        position_of_attacking_pieces = self.attackers(king_square, opp[0]) | self.attackers(king_square, opp[1])
-
-        # check every type of piece that your teammate have
-        for piece_type in [PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING]:
-            for piece in self.getSquares(self.pieceSet(teammate_color, piece_type)):
-                # get all legal moves for every piece of it's type
-                square = self.square(piece[0], piece[1])
-                legal_moves = self.legalMoves(piece, square, teammate_color)
-
-                # check if you can take attacking piece
-                first_option = legal_moves & position_of_attacking_pieces
-
-                # get position of all the attacking pieces on king
-                attacking_pieces = self.getSquares(position_of_attacking_pieces)
-
-                # get all field around king, that are empty
-                # get ray of that field, check if you can block piece, that attack it
-                if color in [RED, YELLOW]:
-                    opp = [GREEN, BLUE]
-                elif color in [GREEN, BLUE]:
-                    opp = [RED, YELLOW]
-                else:
-                    return
-                operations = {0: self.shiftSW,
-                              1: self.shiftS,
-                              2: self.shiftSE,
-                              3: self.shiftW,
-                              4: self.shiftE,
-                              5: self.shiftNW,
-                              6: self.shiftN,
-                              7: self.shiftNE}
-                origin = self.pieceSet(color, KING)
-                for i in range(8):
-                    new_position = operations[i](origin)
-                    if boardMask & new_position == 0:
-                        continue
-                    new_position_square = self.bitScanForward(new_position)
-                    # check if that position is empty
-                    if self.emptyBB & new_position != 0:
-                        # get all pieces, that attack this square
-                        attackers = self.attackers(new_position_square, opp[0]) | self.attackers(new_position_square, opp[1])
-                        attackers_position = self.getSquares(attackers)
-                        # if more than 2 attackers, you can't block it
-                        if len(attackers_position) >= 2:
-                            continue
-                        # check if you can block
-                        attacker_square = self.square(attackers_position[0][0], attackers_position[0][1])
-                        ray = self.rayBetween(new_position_square, attacker_square)
-                        if_can_block = legal_moves & ray
-                        if if_can_block != 0:
-                            self.canPreventCheckmate[color] = True
-                            return True
-
-                all_possible_moves = 0
-                # check if u can block one of attacking pieces
-                for off_piece in attacking_pieces:
-                    piece_square = self.square(off_piece[0], off_piece[1])
-                    ray = self.rayBetween(king_square, piece_square)
-                    if all_possible_moves == 0:
-                        all_possible_moves = ray
-                    else:
-                        all_possible_moves &= ray
-                second_option = legal_moves & all_possible_moves
-                if (first_option | second_option) != 0:
-                    self._about_to_get_checkmated[color] = True
-                    return True
-        return False
+    # def checkIfTeammateCanPreventCheckmate(self, color):
+    #     """Check if teammate of team color can prevent checkmate"""
+    #     # get color of your teammate
+    #     teammate_color = color + 2
+    #     if teammate_color >= 4:
+    #         teammate_color -= 4
+    #
+    #     if teammate_color in [RED, YELLOW]:
+    #         opp = [GREEN, BLUE]
+    #     elif teammate_color in [GREEN, BLUE]:
+    #         opp = [RED, YELLOW]
+    #     else:
+    #         return
+    #     # get position of king
+    #     king_file, king_rank = self.getSquares(self.pieceSet(color, KING))[0]
+    #     king_square = self.square(king_file, king_rank)
+    #
+    #     # get bitmap of pieces attacking the king
+    #     position_of_attacking_pieces = self.attackers(king_square, opp[0]) | self.attackers(king_square, opp[1])
+    #
+    #     # check every type of piece that your teammate have
+    #     for piece_type in [PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING]:
+    #         for piece in self.getSquares(self.pieceSet(teammate_color, piece_type)):
+    #             # get all legal moves for every piece of it's type
+    #             square = self.square(piece[0], piece[1])
+    #             legal_moves = self.legalMoves(piece, square, teammate_color)
+    #
+    #             # check if you can take attacking piece
+    #             first_option = legal_moves & position_of_attacking_pieces
+    #
+    #             # get position of all the attacking pieces on king
+    #             attacking_pieces = self.getSquares(position_of_attacking_pieces)
+    #
+    #             # get all field around king, that are empty
+    #             # get ray of that field, check if you can block piece, that attack it
+    #             if color in [RED, YELLOW]:
+    #                 opp = [GREEN, BLUE]
+    #             elif color in [GREEN, BLUE]:
+    #                 opp = [RED, YELLOW]
+    #             else:
+    #                 return
+    #             operations = {0: self.shiftSW,
+    #                           1: self.shiftS,
+    #                           2: self.shiftSE,
+    #                           3: self.shiftW,
+    #                           4: self.shiftE,
+    #                           5: self.shiftNW,
+    #                           6: self.shiftN,
+    #                           7: self.shiftNE}
+    #             origin = self.pieceSet(color, KING)
+    #             for i in range(8):
+    #                 new_position = operations[i](origin)
+    #                 if boardMask & new_position == 0:
+    #                     continue
+    #                 new_position_square = self.bitScanForward(new_position)
+    #                 # check if that position is empty
+    #                 if self.emptyBB & new_position != 0:
+    #                     # get all pieces, that attack this square
+    #                     attackers = self.attackers(new_position_square, opp[0]) | self.attackers(new_position_square, opp[1])
+    #                     attackers_position = self.getSquares(attackers)
+    #                     # if more than 2 attackers, you can't block it
+    #                     if len(attackers_position) >= 2:
+    #                         continue
+    #                     # check if you can block
+    #                     attacker_square = self.square(attackers_position[0][0], attackers_position[0][1])
+    #                     ray = self.rayBetween(new_position_square, attacker_square)
+    #                     if_can_block = legal_moves & ray
+    #                     if if_can_block != 0:
+    #                         self.canPreventCheckmate[color] = True
+    #                         return True
+    #
+    #             all_possible_moves = 0
+    #             # check if u can block one of attacking pieces
+    #             for off_piece in attacking_pieces:
+    #                 piece_square = self.square(off_piece[0], off_piece[1])
+    #                 ray = self.rayBetween(king_square, piece_square)
+    #                 if all_possible_moves == 0:
+    #                     all_possible_moves = ray
+    #                 else:
+    #                     all_possible_moves &= ray
+    #             second_option = legal_moves & all_possible_moves
+    #             if (first_option | second_option) != 0:
+    #                 self._about_to_get_checkmated[color] = True
+    #                 return True
+    #     return False
 
     def attackers(self, square, color):
         """Returns the set of all pieces attacking the target square."""
@@ -729,35 +729,35 @@ class Board(QObject):
             pinner &= pinner - 1
         return pinned
 
-    def absolutePinsTeammate(self, color):
-        """Returns absolutely (partially) pinned pieces."""
-        teammate_color = color + 2
-        if teammate_color >= 4:
-            teammate_color -= 4
-        pinned = 0
-        ownPieces = self.pieceBB[color]
-        kingSquare = self.bitScanForward(self.pieceSet(teammate_color, KING))
-        if color in (RED, YELLOW):
-            opponentRQ = self.pieceSet(BLUE, ROOK) | self.pieceSet(BLUE, QUEEN) | \
-                         self.pieceSet(GREEN, ROOK) | self.pieceSet(GREEN, QUEEN)
-            opponentBQ = self.pieceSet(BLUE, BISHOP) | self.pieceSet(BLUE, QUEEN) | \
-                         self.pieceSet(GREEN, BISHOP) | self.pieceSet(GREEN, QUEEN)
-        else:
-            opponentRQ = self.pieceSet(RED, ROOK) | self.pieceSet(RED, QUEEN) | \
-                         self.pieceSet(YELLOW, ROOK) | self.pieceSet(YELLOW, QUEEN)
-            opponentBQ = self.pieceSet(RED, BISHOP) | self.pieceSet(RED, QUEEN) | \
-                         self.pieceSet(YELLOW, BISHOP) | self.pieceSet(YELLOW, QUEEN)
-        pinner = self.xrayRookAttacks(ownPieces, kingSquare) & opponentRQ
-        while pinner:
-            square = self.bitScanForward(pinner)
-            pinned |= self.rayBetween(square, kingSquare) & ownPieces
-            pinner &= pinner - 1
-        pinner = self.xrayBishopAttacks(ownPieces, kingSquare) & opponentBQ
-        while pinner:
-            square = self.bitScanForward(pinner)
-            pinned |= self.rayBetween(square, kingSquare) & ownPieces
-            pinner &= pinner - 1
-        return pinned
+    # def absolutePinsTeammate(self, color):
+    #     """Returns absolutely (partially) pinned pieces."""
+    #     teammate_color = color + 2
+    #     if teammate_color >= 4:
+    #         teammate_color -= 4
+    #     pinned = 0
+    #     ownPieces = self.pieceBB[color]
+    #     kingSquare = self.bitScanForward(self.pieceSet(teammate_color, KING))
+    #     if color in (RED, YELLOW):
+    #         opponentRQ = self.pieceSet(BLUE, ROOK) | self.pieceSet(BLUE, QUEEN) | \
+    #                      self.pieceSet(GREEN, ROOK) | self.pieceSet(GREEN, QUEEN)
+    #         opponentBQ = self.pieceSet(BLUE, BISHOP) | self.pieceSet(BLUE, QUEEN) | \
+    #                      self.pieceSet(GREEN, BISHOP) | self.pieceSet(GREEN, QUEEN)
+    #     else:
+    #         opponentRQ = self.pieceSet(RED, ROOK) | self.pieceSet(RED, QUEEN) | \
+    #                      self.pieceSet(YELLOW, ROOK) | self.pieceSet(YELLOW, QUEEN)
+    #         opponentBQ = self.pieceSet(RED, BISHOP) | self.pieceSet(RED, QUEEN) | \
+    #                      self.pieceSet(YELLOW, BISHOP) | self.pieceSet(YELLOW, QUEEN)
+    #     pinner = self.xrayRookAttacks(ownPieces, kingSquare) & opponentRQ
+    #     while pinner:
+    #         square = self.bitScanForward(pinner)
+    #         pinned |= self.rayBetween(square, kingSquare) & ownPieces
+    #         pinner &= pinner - 1
+    #     pinner = self.xrayBishopAttacks(ownPieces, kingSquare) & opponentBQ
+    #     while pinner:
+    #         square = self.bitScanForward(pinner)
+    #         pinned |= self.rayBetween(square, kingSquare) & ownPieces
+    #         pinner &= pinner - 1
+    #     return pinned
 
     # def aligned(self, origin, target, kingSquare):
     #     """Checks if partially pinned piece is moved along ray from or towards king."""
@@ -812,8 +812,9 @@ class Board(QObject):
         else:
             return self.attacked(kingSquare, RED) or self.attacked(kingSquare, YELLOW), self.fileRank(kingSquare)
 
-    def kingInCheckmate(self, color, current_player):
+    def kingInCheckmate(self, current_player):
         """Checks if a player's king is in checkmate."""
+        color = {'r': 0, 'b': 1, 'y': 2, 'g': 3}[current_player]
         # check if king in check
         check, king_pos = self.kingInCheck(color)
         if not check:
@@ -830,10 +831,13 @@ class Board(QObject):
                     return False
         # if playing in team, check if teammate can prevent checkmate
         # move of the teammate must be before player that gets checkmated
-        teammate = ['y', 'g', 'r', 'b']
-        if teammate[color] == current_player:
-            return not self.checkIfTeammateCanPreventCheckmate(color)
+        # teammate = ['y', 'g', 'r', 'b']
+        # if teammate[color] == current_player:
+        #     return not self.checkIfTeammateCanPreventCheckmate(color)
         return True
+
+    def checkIfCanCastle(self):
+        pass
 
     def printBB(self, bitboard):
         """Prints 14x14 bitboard in easily readable format (for debugging)."""
@@ -895,7 +899,7 @@ class Board(QObject):
         self.boardData[index] = data
         self.dataChanged.emit(file, rank)
 
-    def makeMove(self, fromFile, fromRank, toFile, toRank):
+    def makeMove(self, fromFile, fromRank, toFile, toRank, promote=None):
         """Moves piece from square (fromFile, fromRank) to square (toFile, toRank)."""
         # check if castling by castling square
         # if yes, than register move as castling by moving into rook square
@@ -1094,10 +1098,15 @@ class Board(QObject):
             self.pieceBB[piece_] ^= toBB
             self.occupiedBB ^= toBB
             self.emptyBB ^= toBB
+        if promote is not None:
+            promoteChar = {RED: 'r', BLUE: 'b', YELLOW: 'y', GREEN: 'g', QUEEN: 'Q', KNIGHT: 'N', ROOK: 'R', BISHOP: 'B'}
+            self.setData(toFile, toRank, f'{promoteChar[color]}{promoteChar[promote]}')
+            self.pieceBB[PAWN] ^= toBB
+            self.pieceBB[promote] ^= toBB
         # Emit signal for board view auto-rotation
         self.autoRotate.emit(-1)
 
-    def undoMove(self, fromFile, fromRank, toFile, toRank, char, captured):
+    def undoMove(self, fromFile, fromRank, toFile, toRank, char, captured, promote):
         """Takes back move and restores captured piece."""
         # Remove king and rook from castling squares
         if (fromFile, fromRank, toFile, toRank) == (7, 0, 9, 0):  # red kingside
@@ -1282,7 +1291,10 @@ class Board(QObject):
             self.pieceBB[piece_] ^= fromBB
             self.occupiedBB ^= fromBB
             self.emptyBB ^= fromBB
-        # Emit signal for board view auto-rotation
+        # Emit signal for board view auto-
+        if promote is not None:
+            self.pieceBB[PAWN] ^= fromBB
+            self.pieceBB[promote] ^= fromBB
         self.autoRotate.emit(1)
 
     def castlingAvailability(self):

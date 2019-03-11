@@ -25,6 +25,7 @@ from datetime import datetime
 from re import split
 from gui.board import Board
 from gui.settings import Settings
+from gui.view import PromoteDialog
 
 # Load settings
 COM = '4pc'
@@ -59,7 +60,7 @@ class Algorithm(QObject):
 
     # chess.com: [player to move] - [dead 1/0] - [kingside castle 1/0] - [queenside castle 1/0] - [points] - [ply] -
     chesscomStartFen4 = 'R-0,0,0,0-1,1,1,1-1,1,1,1-0,0,0,0-0-3,yR,yN,yB,yK,yQ,yB,yN,yR,3/3,yP,yP,yP,yP,yP,yP,yP,yP,3/' \
-                        '14/bR,bP,10,gP,gR/bN,bP,10,gP,gN/bB,bP,10,gP,gB/bK,bP,10,gP,gQ/bQ,bP,10,gP,gK/bB,bP,10,gP,gB/'\
+                        '14/bR,bP,10,gP,gR/bN,bP,10,gP,gN/bB,bP,10,gP,gB/bK,bP,10,gP,gQ/bQ,bP,10,gP,gK/bB,bP,10,gP,gB/' \
                         'bN,bP,10,gP,gN/bR,bP,10,gP,gR/14/3,rP,rP,rP,rP,rP,rP,rP,rP,3/3,rR,rN,rB,rQ,rK,rB,rN,rR,3'
 
     def __init__(self):
@@ -88,6 +89,7 @@ class Algorithm(QObject):
 
     class Node:
         """Generic node class. Basic element of a tree."""
+
         def __init__(self, name, children, parent):
             self.name = name
             self.children = children
@@ -235,14 +237,14 @@ class Algorithm(QObject):
         castling = fen4.split(' ')[2]
         RED, BLUE, YELLOW, GREEN = range(4)
         QUEENSIDE, KINGSIDE = (0, 1)
-        self.board.castle[RED][KINGSIDE] = (1 << self.square(10, 0)) if 'rK' in castling else 0
-        self.board.castle[RED][QUEENSIDE] = (1 << self.square(3, 0)) if 'rQ' in castling else 0
-        self.board.castle[BLUE][KINGSIDE] = (1 << self.square(0, 10)) if 'bK' in castling else 0
-        self.board.castle[BLUE][QUEENSIDE] = (1 << self.square(0, 3)) if 'bQ' in castling else 0
-        self.board.castle[YELLOW][KINGSIDE] = (1 << self.square(3, 13)) if 'yK' in castling else 0
-        self.board.castle[YELLOW][QUEENSIDE] = (1 << self.square(10, 13)) if 'yQ' in castling else 0
-        self.board.castle[GREEN][KINGSIDE] = (1 << self.square(13, 3)) if 'gK' in castling else 0
-        self.board.castle[GREEN][QUEENSIDE] = (1 << self.square(13, 10)) if 'gQ' in castling else 0
+        self.board.castlingState[RED][KINGSIDE] = 1 if 'rK' in castling else 0
+        self.board.castlingState[RED][QUEENSIDE] = 1 if 'rQ' in castling else 0
+        self.board.castlingState[BLUE][KINGSIDE] = 1 if 'bK' in castling else 0
+        self.board.castlingState[BLUE][QUEENSIDE] = 1 if 'bQ' in castling else 0
+        self.board.castlingState[YELLOW][KINGSIDE] = 1 if 'yK' in castling else 0
+        self.board.castlingState[YELLOW][QUEENSIDE] = 1 if 'yQ' in castling else 0
+        self.board.castlingState[GREEN][KINGSIDE] = 1 if 'gK' in castling else 0
+        self.board.castlingState[GREEN][QUEENSIDE] = 1 if 'gQ' in castling else 0
 
     def setBoardState(self, fen4):
         """Sets board according to FEN4."""
@@ -272,6 +274,9 @@ class Algorithm(QObject):
     def toChesscomMove(self, moveString):
         """Converts move string to chess.com move notation."""
         moveString = moveString.split()
+        promoteString = None
+        if '=' in moveString[len(moveString) - 1]:
+            promoteString = moveString.pop(len(moveString) - 1)
         if moveString[0][1] == 'P':
             moveString.pop(0)
             if len(moveString) == 3:
@@ -309,6 +314,8 @@ class Algorithm(QObject):
                 else:
                     moveString[0] = moveString[0][1]
                     moveString.insert(2, '-')
+        if promoteString is not None:
+            moveString.append(promoteString)
         moveString = ''.join(moveString)
         return moveString
 
@@ -344,6 +351,7 @@ class Algorithm(QObject):
             move = move.replace('-', '')
             move = move.replace('+', '')
             move = move.replace('#', '')
+            move = move.replace('=', '')
             prev = ''
             i = 0
             for char in move:
@@ -361,9 +369,14 @@ class Algorithm(QObject):
     def toAlgebraic(self, moveString):
         """Converts move string to algebraic notation."""
         moveString = moveString.split()
+        promoteString = None
+        if '=' in moveString[len(moveString) - 1]:
+            promoteString = moveString.pop(len(moveString) - 1)
         if moveString[0][1] == 'P':
             moveString.pop(0)
-            if len(moveString) == 3:
+            if '=' in moveString[len(moveString) - 1]:
+                moveString.insert(1, '-')
+            elif len(moveString) == 3:
                 moveString[1] = 'x'
         elif len(moveString) == 4:
             # Castling move
@@ -386,6 +399,8 @@ class Algorithm(QObject):
                     moveString = 'O-O-O'
                 else:
                     moveString[0] = moveString[0][1]
+        if promoteString is not None:
+            moveString.append(promoteString)
         moveString = ''.join(moveString)
         return moveString
 
@@ -446,6 +461,12 @@ class Algorithm(QObject):
         moveString = self.currentMove.name
         moveString = moveString.split()
         piece = moveString[0]
+        # promote
+        promote = None
+        if "=" in moveString[-1]:
+            promoteChar = {'Q': 8, 'N': 5, 'R': 7, 'B': 6}
+            promote = moveString.pop(len(moveString) - 1)
+            promote = promoteChar[promote[-1]]
         fromFile = ord(moveString[1][0]) - 97  # chr(97) = 'a'
         fromRank = int(moveString[1][1:]) - 1
         if len(moveString) == 4:
@@ -456,7 +477,7 @@ class Algorithm(QObject):
             captured = ' '
             toFile = ord(moveString[2][0]) - 97
             toRank = int(moveString[2][1:]) - 1
-        self.board.undoMove(fromFile, fromRank, toFile, toRank, piece, captured)
+        self.board.undoMove(fromFile, fromRank, toFile, toRank, piece, captured, promote)
         self.currentMove = self.currentMove.parent
         self.moveNumber -= 1
         self.playerQueue.rotate(1)
@@ -487,6 +508,11 @@ class Algorithm(QObject):
             return
         moveString = self.currentMove.children[var].name
         moveString = moveString.split()
+        promote = None
+        if "=" in moveString[-1]:
+            promoteChar = {'Q': 8, 'N': 5, 'R': 7, 'B': 6}
+            promote = moveString.pop(len(moveString)-1)
+            promote = promoteChar[promote[-1]]
         fromFile = ord(moveString[1][0]) - 97  # chr(97) = 'a'
         fromRank = int(moveString[1][1:]) - 1
         if len(moveString) == 4:
@@ -495,7 +521,7 @@ class Algorithm(QObject):
         else:
             toFile = ord(moveString[2][0]) - 97
             toRank = int(moveString[2][1:]) - 1
-        self.board.makeMove(fromFile, fromRank, toFile, toRank)
+        self.board.makeMove(fromFile, fromRank, toFile, toRank, promote)
         self.currentMove = self.currentMove.children[var]
         self.moveNumber += 1
         # Signal View to add move highlight and remove highlights of next player
@@ -935,6 +961,7 @@ class Algorithm(QObject):
 
 class Teams(Algorithm):
     """A subclass of Algorithm for the 4-player chess Teams variant."""
+
     def __init__(self):
         super().__init__()
         self.variant = 'Teams'
@@ -962,8 +989,36 @@ class Teams(Algorithm):
         if not (1 << target) & self.board.legalMoves(piece, origin, color):
             return False
 
+        # todo promoting mechanism
+        #########################################
+        RED, BLUE, YELLOW, GREEN, PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING = range(10)
+        promoteText = ""
+        if piece == PAWN:
+            if (toRank == 10 and color == RED) or \
+                    (toRank == 3 and color == YELLOW) or \
+                    (toFile == 10 and color == BLUE) or \
+                    (toFile == 3 and color == GREEN):
+                self.promotionDialog = PromoteDialog(color)
+                code = self.promotionDialog.exec_()
+                if code == 0:
+                    return False
+                elif code == 1:
+                    # promote to queen
+                    promoteText = " =Q"
+                elif code == 2:
+                    # promote to knight
+                    promoteText = " =N"
+                elif code == 3:
+                    # promote to rook
+                    promoteText = " =R"
+                elif code == 4:
+                    # promote to bishop
+                    promoteText = " =B"
+        #########################################
+
         # Check if move already exists
         moveString = self.strMove(fromFile, fromRank, toFile, toRank)
+        moveString += promoteText
         if not (self.currentMove.children and (moveString in (child.name for child in self.currentMove.children))):
             # Make move child of current move and update current move (i.e. previous move is parent of current move)
             move = self.Node(moveString, [], self.currentMove)
@@ -977,9 +1032,14 @@ class Teams(Algorithm):
                 if child.name == moveString:
                     self.currentMove = child
                     self.updateMoveText()  # Make current move selected in move list
+        promoteDict = {'Q': QUEEN, 'N': KNIGHT, 'R': ROOK, 'B': BISHOP}
+        if promoteText == "":
+            promote = None
+        else:
+            promote = promoteDict[promoteText[-1]]
 
         # Make the move
-        self.board.makeMove(fromFile, fromRank, toFile, toRank)
+        self.board.makeMove(fromFile, fromRank, toFile, toRank, promote)
 
         # Increment move number
         self.moveNumber += 1
@@ -997,11 +1057,8 @@ class Teams(Algorithm):
 
         #################
         # TODO grayout player that got checkmated
-        self.board.canPreventCheckmate = [False]*4
-        for color in range(4):
-            if self.board.kingInCheckmate(color, self.currentPlayer):
-                color_name = ['red', 'blue', 'yellow', 'green']
-                print(f'{color_name[color]} lost!')
+        if self.board.kingInCheckmate(self.currentPlayer):
+            print(f'{self.currentPlayer} lost!')
         #################
 
         return True
@@ -1009,6 +1066,7 @@ class Teams(Algorithm):
 
 class FFA(Algorithm):
     """A subclass of Algorithm for the 4-player chess Free-For-All (FFA) variant."""
+
     # TODO implement FFA class
     def __init__(self):
         super().__init__()

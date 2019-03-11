@@ -137,3 +137,7 @@ https://github.com/GammaDeltaII/4PlayerChess
 
 ## License
 This project is licensed under the GNU General Public License v3.0. See the [COPYING](COPYING.md) file for details.
+
+## Todo
+* support dead of the player (dr, db ...)
+* change castling (importing fen4 not working properly)
