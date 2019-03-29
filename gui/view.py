@@ -18,14 +18,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from PyQt5.QtWidgets import QWidget, QPushButton, QLineEdit, QPlainTextEdit, QFrame
+from PyQt5.QtWidgets import QWidget, QPushButton, QLineEdit, QPlainTextEdit, QFrame, QDialog
 from PyQt5.QtCore import Qt, QSize, QRect, QRectF, QPoint, pyqtSignal, QEvent, QByteArray, QDataStream, QIODevice, \
     QMimeData, QLineF, QSettings
 from PyQt5.QtGui import QPainter, QPalette, QColor, QFont, QDrag, QIcon, QCursor, QPolygonF, QPainterPath, QPen, \
-    QBrush
+    QBrush, QTextOption, QPixmap
 from collections import deque
 from gui.board import Board
 from gui.settings import Settings
+from ui.promotedialog import Ui_Dialog
 # Load settings
 # COM = '4pc'
 # APP = '4PlayerChess'
@@ -561,6 +562,10 @@ class View(QWidget):
         else:
             event.ignore()
 
+    def showPromoteMenu(self):
+        """When pawn reaches 11 rank, show promoting menu"""
+        pass
+
     def addHighlight(self, highlight):
         """Adds highlight to the list and redraws view."""
         self.highlights.append(highlight)
@@ -1001,9 +1006,66 @@ class CommentEdit(QPlainTextEdit):
         self.setFrameShape(QFrame.NoFrame)
         self.installEventFilter(self)
         self.setFont(QFont('Trebuchet MS'))
+        self.setWordWrapMode(QTextOption.WrapAnywhere)
+        self.setLineWrapMode(CommentEdit.WidgetWidth)
+        self.setDisabled(True)
 
     def eventFilter(self, object_, event):
         """Handles focusOut and returnPressed event."""
         if event.type() == QEvent.FocusOut:
             self.focusOut.emit()
         return False
+
+
+class PromoteDialog(QDialog, Ui_Dialog):
+    def __init__(self, color):
+        super(PromoteDialog, self).__init__()
+        self.setupUi(self)
+        self.setWindowFlags(Qt.FramelessWindowHint)
+        self.setModal(True)
+        self.setSizeGripEnabled(False)
+
+        # set proper icons
+        if color == 0:  # RED
+            self.queenButton.setIcon(QIcon(QPixmap("resources//img//pieces//rQ.svg")))
+            self.queenButton.setIconSize(self.queenButton.rect().size())
+            self.knightButton.setIcon(QIcon(QPixmap("resources//img//pieces//rN.svg")))
+            self.knightButton.setIconSize(self.knightButton.rect().size())
+            self.rookButton.setIcon(QIcon(QPixmap("resources//img//pieces//rR.svg")))
+            self.rookButton.setIconSize(self.rookButton.rect().size())
+            self.bishopButton.setIcon(QIcon(QPixmap("resources//img//pieces//rB.svg")))
+            self.bishopButton.setIconSize(self.bishopButton.rect().size())
+        elif color == 1:  # BLUE
+            self.queenButton.setIcon(QIcon(QPixmap("resources//img//pieces//bQ.svg")))
+            self.queenButton.setIconSize(self.queenButton.rect().size())
+            self.knightButton.setIcon(QIcon(QPixmap("resources//img//pieces//bN.svg")))
+            self.knightButton.setIconSize(self.knightButton.rect().size())
+            self.rookButton.setIcon(QIcon(QPixmap("resources//img//pieces//bR.svg")))
+            self.rookButton.setIconSize(self.rookButton.rect().size())
+            self.bishopButton.setIcon(QIcon(QPixmap("resources//img//pieces//bB.svg")))
+            self.bishopButton.setIconSize(self.bishopButton.rect().size())
+        elif color == 2:  # YELLOW
+            self.queenButton.setIcon(QIcon(QPixmap("resources//img//pieces//yQ.svg")))
+            self.queenButton.setIconSize(self.queenButton.rect().size())
+            self.knightButton.setIcon(QIcon(QPixmap("resources//img//pieces//yN.svg")))
+            self.knightButton.setIconSize(self.knightButton.rect().size())
+            self.rookButton.setIcon(QIcon(QPixmap("resources//img//pieces//yR.svg")))
+            self.rookButton.setIconSize(self.rookButton.rect().size())
+            self.bishopButton.setIcon(QIcon(QPixmap("resources//img//pieces//yB.svg")))
+            self.bishopButton.setIconSize(self.bishopButton.rect().size())
+        elif color == 3:  # GREEN
+            self.queenButton.setIcon(QIcon(QPixmap("resources//img//pieces//gQ.svg")))
+            self.queenButton.setIconSize(self.queenButton.rect().size())
+            self.knightButton.setIcon(QIcon(QPixmap("resources//img//pieces//gN.svg")))
+            self.knightButton.setIconSize(self.knightButton.rect().size())
+            self.rookButton.setIcon(QIcon(QPixmap("resources//img//pieces//gR.svg")))
+            self.rookButton.setIconSize(self.rookButton.rect().size())
+            self.bishopButton.setIcon(QIcon(QPixmap("resources//img//pieces//gB.svg")))
+            self.bishopButton.setIconSize(self.bishopButton.rect().size())
+
+        # set signals
+        self.queenButton.clicked.connect(lambda: self.done(1))
+        self.knightButton.clicked.connect(lambda: self.done(2))
+        self.rookButton.clicked.connect(lambda: self.done(3))
+        self.bishopButton.clicked.connect(lambda: self.done(4))
+        self.exitButton.clicked.connect(lambda: self.done(0))

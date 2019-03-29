@@ -21,11 +21,12 @@
 from PyQt5.QtWidgets import QMainWindow, QSizePolicy, QLayout, QListWidget, QListWidgetItem, QListView, QFrame, \
     QFileDialog, QMenu, QAction, QDialog, QDialogButtonBox, QScrollArea
 from PyQt5.QtCore import Qt, QSize, QPoint, QRect, QSettings, QUrl, pyqtSignal
-from PyQt5.QtGui import QIcon, QColor, QFont, QFontMetrics, QPainter, QDesktopServices
+from PyQt5.QtGui import QIcon, QColor, QFont, QFontMetrics, QPainter, QDesktopServices, QTextOption
 from ui.mainwindow import Ui_MainWindow
 from ui.settings import Ui_Preferences
 from ui.infodialog import Ui_InfoDialog
 from gui.algorithm import Teams
+from gui.view import CommentEdit
 from urllib import request
 import certifi
 from re import compile
@@ -51,8 +52,16 @@ class MainWindow(QMainWindow, Ui_MainWindow):
         super().__init__()
         self.setupUi(self)
 
+        # todo change in ui
+        self.moveListWidget.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+        self.commentField.setWordWrapMode(QTextOption.WrapAnywhere)
+        self.commentField.setLineWrapMode(CommentEdit.WidgetWidth)
+        self.commentField.setDisabled(True)
+
+
         # Show license notice
-        self.statusbar.showMessage(APP + '. Copyright (C) 2018, GammaDeltaII (GNU GPL-3.0-or-later)', 5000)
+        self.statusbar.showMessage(APP + '. Copyright (C) 2019, GammaDeltaII (GNU GPL-3.0-or-later)', 5000)
 
         # Create algorithm instance (view instance is already created in UI code)
         self.algorithm = Teams()
@@ -659,28 +668,52 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             """Custom QListWidgetItem class for row items in move list rows."""
             def __init__(self, text):
                 super().__init__(text)
-                self.setTextAlignment(Qt.AlignCenter)
+                self.setTextAlignment(Qt.AlignCenter | Qt.AlignVCenter)
+                self.fitContent()
 
             def sizeHint(self):
                 """Implements sizeHint() method."""
+                # set more space on vertical axis
                 fm = QFontMetrics(QFont('Trebuchet MS', 12, QFont.Bold))
-                spacing = 10  # TODO get rid of the item spacing somehow
-                width = fm.width(self.text()) + 2 * spacing
+                # sum up to 290 (width of the row)
+                if self.text().split('.')[0].isdigit() or self.text()[0] == '(':  # index of the row
+                    width = 40
+                elif self.text()[0] == ')':
+                    width = 5
+                else:
+                    width = 60
                 height = fm.height()
                 return QSize(width, height)
+
+            def fitContent(self):
+                """Change font to match width of item"""
+                font = self.font()
+                font_size = font.pointSizeF()
+                while True:
+                    fm = QFontMetrics(font)
+                    text_width = fm.width(self.text())
+                    if text_width > self.sizeHint().width():
+                        font_size -= 0.25
+                        font.setPointSizeF(font_size)
+                        continue
+                    break
+                font.setPointSizeF(font_size)
+                self.setFont(font)
 
         self.moveListWidget.clear()
         tokens = self.algorithm.split_(moveText)
         row = Row()
         row.itemClicked.connect(lambda item, this=row: self.moveListItemClicked(item, this))
         level = 0
+        # todo comment not showing in pgn4 if commented on last move
         for token in tokens:
             rowItem = RowItem(token)
             rowItem.setSizeHint(rowItem.sizeHint())  # Update size hack
             if token[0] == '{':
                 # Comment
                 self.commentField.setPlainText(token[1:-1])
-            elif token == '(':
+            elif token[0] == '(':
+                # todo while in variation, start from current player column
                 # Start of new variation
                 level += 1
                 if not row.count() == 0:
